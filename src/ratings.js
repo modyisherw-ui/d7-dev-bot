@@ -38,6 +38,12 @@ function findProduct(_guildId, idOrName) {
     products.find(p => p.name.toLowerCase() === String(idOrName).toLowerCase());
 }
 
+// البحث بالرتبة: نستخدمه لإرسال رسالة التقييم تلقائياً لمجرد حصول العضو على رتبة منتج
+function getByRole(roleId) {
+  if (!roleId) return null;
+  return getProducts().find(p => p.roleId && p.roleId === String(roleId)) || null;
+}
+
 // ═══════════════ إرسال رسالة الشراء على الخاص ═══════════════
 async function sendPurchaseDM(target, product, client, guild) {
   try {
@@ -172,4 +178,4 @@ async function handleCommentModal(interaction) {
   } catch (_) {}
 }
 
-module.exports = { sendPurchaseDM, handleLangButton, handleStarButton, handleCommentModal, getProducts, findProduct, saveRatingConfig };
+module.exports = { sendPurchaseDM, handleLangButton, handleStarButton, handleCommentModal, getProducts, findProduct, getByRole, saveRatingConfig };

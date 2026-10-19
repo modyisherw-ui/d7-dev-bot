@@ -274,7 +274,7 @@ function storeSection() {
   return { embeds: [embed("🛒 إعدادات المتجر", [
     `**تأكيد الدفع اليدوي:** ${p.manualConfirmation !== false ? "✅ مفعّل" : "❌ معطّل"} — الطلبات تحتاج موافقة موظف قبل إعطاء الرتبة.`,
     `**رسالة الشكر:** ${p.sendThankYouDM === true ? "✅ مفعّل" : "❌ معطّل"} — رسالة خاصة بعد تأكيد الطلب.`,
-    `**رسالة التقييم:** ${p.sendProductReviewDM === true ? "✅ مفعّل" : "❌ معطّل"} — تقييم من 1-5 نجوم بعد الشراء.`,
+    `**رسالة التقييم:** ${p.sendProductReviewDM === true ? "✅ مفعّل" : "❌ معطّل"} — تصل تلقائياً للعضو بأي رتبة منتج ياخذها.`,
     "",
     "اضغط على الزر لتبديل الحالة.",
   ].join("\n"))], components: rows };
@@ -383,10 +383,7 @@ async function confirmOrder(interaction, id) {
   if (config.purchase.sendThankYouDM) {
     await member.send({ embeds: [embed("Thank you for your purchase!", `Your purchase of **${order.name}** has been confirmed.\nOrder: #${id}\nProduct role: ${order.role_id ? `<@&${order.role_id}>` : "No role configured"}`)] }).catch(() => {});
   }
-  if (config.purchase.sendProductReviewDM) {
-    const row = new ActionRowBuilder().addComponents(...[1,2,3,4,5].map(n => new ButtonBuilder().setCustomId(`product_rate:${id}:${n}`).setLabel(`${n} ★`).setStyle(n >= 4 ? ButtonStyle.Success : ButtonStyle.Secondary)));
-    await member.send({ content: `Please rate **${order.name}** (Order #${id}).`, components: [row] }).catch(() => {});
-  }
+  // رسالة التقييم ترسل من مستمع رتب المنتجات (أدناه) — نفس النضام المستخدم في NSR Hub
   // إشعار روم الطلبات: "فلان اشترى هذا المنتج"
   await sendToConfiguredChannel(guild, "orders", {
     embeds: [embed("🛒 شراء جديد", [
@@ -472,6 +469,35 @@ async function finishProduct(interaction) {
   const message = `✅ أُضيف المنتج **${name}** برقم \`#${res.lastInsertRowid}\` — ${formatPrice(price)}${pending.roleId ? `\nالرتبة: <@&${pending.roleId}>` : "\nبدون رتبة"}`;
   return respondWith(interaction, { ...productsSection(), content: message });
 }
+
+// ─────────── رسالة التقييم التلقائية (نفس نظام NSR Hub) ───────────
+// أي عضو ياخذ رتبة أي منتج — سواء من تأكيد الطلب أو يدوياً من الموظفين —
+// توصله رسالة التقييم في الخاص. مع منع تكرار نفس الرسالة لنفس العضو والمنتج.
+const lastRatingDm = new Map();
+const RATING_DM_COOLDOWN = 60 * 60 * 1000; // ساعة
+
+async function maybeSendRatingDM(member, product) {
+  try {
+    if (!member?.user || member.user.bot) return;
+    if (config.purchase?.sendProductReviewDM === false) return;
+    if (!product) return;
+    const key = `${member.id}:${product.id}`;
+    const last = lastRatingDm.get(key) || 0;
+    if (Date.now() - last < RATING_DM_COOLDOWN) return;
+    lastRatingDm.set(key, Date.now());
+    await ratings.sendPurchaseDM(member.user, product, client, member.guild);
+  } catch (err) {
+    console.error("Auto rating DM failed:", err.message);
+  }
+}
+
+client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
+  if (!newMember?.user) return;
+  // الرتب المضافة فقط: اللي موجودة عند الجديد ومو موجودة عند القديم
+  for (const role of newMember.roles.cache.values()) {
+    if (!oldMember?.roles?.cache?.has(role.id)) maybeSendRatingDM(newMember, ratings.getByRole(role.id));
+  }
+});
 
 client.once(Events.ClientReady, async c => {
   console.log(`D7 Dev bot online as ${c.user.tag}`);
@@ -623,7 +649,7 @@ client.on(Events.InteractionCreate, async interaction => {
       }
       if (commandName === "stats") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-        const productStats = db.prepare(`SELECT p.name,COUNT(o.id) count,COALESCE(AVG(o.rating),0) avg FROM products p LEFT JOIN orders o ON o.product_id=p.id AND o.status IN ('confirmed','delivered') GROUP BY p.id ORDER BY count DESC`).all();
+        const productStats = db.prepare(`SELECT p.name,COUNT(o.id) count,COALESCE((SELECT AVG(r.stars) FROM ratings r WHERE r.product_id=p.id),0) avg FROM products p LEFT JOIN orders o ON o.product_id=p.id AND o.status IN ('confirmed','delivered') GROUP BY p.id ORDER BY count DESC`).all();
         const desc = productStats.length ? productStats.map(p => `**${p.name}** — ${p.count} purchase(s) • ${(p.avg || 0).toFixed(1)}/5`).join("\n") : "No products yet.";
         return interaction.reply({ embeds: [embed("Product Analytics", desc)], ephemeral: true });
       }
@@ -701,7 +727,7 @@ client.on(Events.InteractionCreate, async interaction => {
           return interaction.showModal(modal);
         }
         if (section === "analytics") {
-          const productStats = db.prepare(`SELECT p.name,COUNT(o.id) count,COALESCE(AVG(o.rating),0) avg FROM products p LEFT JOIN orders o ON o.product_id=p.id AND o.status IN ('confirmed','delivered') GROUP BY p.id ORDER BY count DESC`).all();
+          const productStats = db.prepare(`SELECT p.name,COUNT(o.id) count,COALESCE((SELECT AVG(r.stars) FROM ratings r WHERE r.product_id=p.id),0) avg FROM products p LEFT JOIN orders o ON o.product_id=p.id AND o.status IN ('confirmed','delivered') GROUP BY p.id ORDER BY count DESC`).all();
           const desc = productStats.length ? productStats.map(p => `**${p.name}** — ${p.count} purchase(s) · ${(p.avg || 0).toFixed(1)}/5`).join("\n") : "No products yet.";
           return interaction.update({ embeds: [embed("Control Center · Analytics", desc)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:refresh").setLabel("Refresh Admin Dashboard").setStyle(ButtonStyle.Success))] });
         }

@@ -9,8 +9,11 @@ on:
     - cron: "*/30 * * * *"
 
 # مجموعة توازٍ واحدة: تشغيل واحد فقط + انتظار واحد (الأحدث يلغي الأقدم)
+# الإلغاء يصير عند push يدوياً فقط — التشغيل المجدول ما يقطع جلسة شغالة
+# (وبالمقابل push الـ sync ما يسبب إعادة تشغيل لأنه يحمل [skip ci])
 concurrency:
   group: d7-bot-run
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 permissions:
   contents: write
@@ -62,7 +65,8 @@ jobs:
           git config user.name "d7-bot"
           git config user.email "d7-bot@users.noreply.github.com"
 
-          ( while true; do sleep 120; git add -A data config.json; if ! git diff --cached --quiet; then git commit -m "chore: sync db $(date -u +%H:%M)" || true; git push origin main || true; fi; done ) &
+          # [skip ci] ضروري: بدونها كل دفعة sync تلغي الجلسة الحالية وتعيد تشغيل البوت بلا نهاية
+          ( while true; do sleep 120; git add -A data config.json; if ! git diff --cached --quiet; then git commit -m "chore: sync db $(date -u +%H:%M) [skip ci]" || true; git push origin main || true; fi; done ) &
           WATCHER=$!
 
           while true; do

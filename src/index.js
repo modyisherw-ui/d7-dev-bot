@@ -3,12 +3,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 const {
   Client, GatewayIntentBits, Partials, Events, REST, Routes,
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
   ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder, RoleSelectMenuBuilder,
-  ChannelType, PermissionFlagsBits
+  ChannelSelectMenuBuilder, ChannelType, PermissionFlagsBits
 } = require("discord.js");
 const db = require("./db");
 const { embed, hasStaff, formatPrice, safeChannelId, cleanFileName } = require("./utils");
+const tickets = require("./tickets");
 const config = require("../config.json");
 
 if (!process.env.DISCORD_TOKEN || !process.env.CLIENT_ID) {
@@ -22,6 +23,8 @@ const client = new Client({
 });
 
 const pendingReviews = new Map();
+// اسم وسعر المنتج بانتظار اختيار الرول (الخطوة الثانية من /product-add)
+const pendingProduct = new Map();
 
 function channelFromConfig(guild, key) {
   const id = config.channels?.[key];
@@ -33,6 +36,103 @@ async function sendToConfiguredChannel(guild, key, payload) {
   if (!channel?.isTextBased()) return false;
   await channel.send(payload);
   return true;
+}
+
+function saveConfig() {
+  fs.writeFileSync(path.join(__dirname, "..", "config.json"), JSON.stringify(config, null, 2));
+}
+
+// ─────────── اللوحة الرئيسية ───────────
+function mainPanel() {
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("panel:products").setLabel("Products").setEmoji("🛍️").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("panel:orders").setLabel("Orders").setEmoji("🧾").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("panel:tickets").setLabel("Tickets").setEmoji("🎫").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("panel:channels").setLabel("Channels").setEmoji("📌").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("panel:content").setLabel("Messages & Embeds").setEmoji("📝").setStyle(ButtonStyle.Secondary)
+  );
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("panel:analytics").setLabel("Analytics").setEmoji("📊").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("panel:welcome").setLabel("Welcome Settings").setEmoji("👋").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("panel:autoroles").setLabel("Automatic Roles").setEmoji("🏷️").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("panel:refresh").setLabel("Refresh Dashboard").setEmoji("🔄").setStyle(ButtonStyle.Success)
+  );
+  const e = embed("D7 Dev • Control Center", [
+    "🛍️ **Products** — إضافة منتج والنشر في الرومات",
+    "🧾 **Orders** — الطلبات وتأكيد الدفع",
+    "🎫 **Tickets** — نظام التذاكر",
+    "📌 **Channels** — تحديد رومات التنبيهات والنشر",
+    "📝 **Messages** — أخبار وقوانين وإمبدات",
+    "📊 **Analytics** — المبيعات والتقييمات",
+  ].join("\n"));
+  return { embeds: [e], components: [row1, row2] };
+}
+
+// ─────────── قسم الرومات: اختيار روم الطلبات والتنبيهات ───────────
+function channelRow(id, key, placeholder) {
+  const sel = new ChannelSelectMenuBuilder().setCustomId(id).setPlaceholder(placeholder)
+    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1);
+  return sel;
+}
+
+function chLabel(key) {
+  const id = config.channels?.[key];
+  return safeChannelId(id) ? `<#${id}>` : "غير محدد";
+}
+
+function channelsSection() {
+  const rows = [
+    new ActionRowBuilder().addComponents(channelRow("d7_ch_orders", "orders", `🔔 روم تنبيه الطلبات — الحالي: ${chLabel("orders")}`)),
+    new ActionRowBuilder().addComponents(channelRow("d7_ch_sales", "salesLogs", `🛒 روم طلبات الشراء — الحالي: ${chLabel("salesLogs")}`)),
+    new ActionRowBuilder().addComponents(channelRow("d7_ch_showcase", "productShowcase", `🛍️ روم عرض المنتجات — الحالي: ${chLabel("productShowcase")}`)),
+    new ActionRowBuilder().addComponents(channelRow("d7_ch_reviews", "reviews", `⭐ روم التقييمات — الحالي: ${chLabel("reviews")}`)),
+    new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 القائمة الرئيسية").setStyle(ButtonStyle.Secondary)),
+  ];
+  return { embeds: [embed("📌 الرومات", "اختر الروم المناسب من كل قائمة — يُحفظ فوراً.")], components: rows };
+}
+
+// ─────────── قسم التذاكر ───────────
+function ticketsSection() {
+  const t = tickets.ensureConfig();
+  const all = tickets.types();
+  const on = all.filter(x => x.enabled !== false).map(x => x.id);
+  const toggle = new StringSelectMenuBuilder()
+    .setCustomId("d7_tk_toggle")
+    .setPlaceholder("أظهر/أخفِ أنواع التذاكر")
+    .setMinValues(0)
+    .setMaxValues(all.length)
+    .addOptions(all.map(x => {
+      const opt = new StringSelectMenuOptionBuilder().setLabel(x.label).setValue(x.id).setDescription(x.enabled === false ? "مطفأ" : "مفعّل");
+      if (on.includes(x.id)) opt.setDefault(true);
+      if (x.emoji && /^\p{Extended_Pictographic}$/u.test(x.emoji.trim())) opt.setEmoji(x.emoji.trim());
+      return opt;
+    }));
+
+  const category = new ChannelSelectMenuBuilder().setCustomId("d7_tk_category")
+    .setPlaceholder(`📁 الكاتيجوري — الحالي: ${safeChannelId(t.categoryId) ? `<#${t.categoryId}>` : "غير محدد"}`)
+    .addChannelTypes(ChannelType.GuildCategory).setMinValues(1).setMaxValues(1);
+  if (safeChannelId(t.categoryId)) category.setDefaultChannels([t.categoryId]);
+
+  const log = new ChannelSelectMenuBuilder().setCustomId("d7_tk_log")
+    .setPlaceholder(`📋 روم اللوق — الحالي: ${safeChannelId(t.logChannelId) ? `<#${t.logChannelId}>` : "غير محدد"}`)
+    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1);
+  if (safeChannelId(t.logChannelId)) log.setDefaultChannels([t.logChannelId]);
+
+  const staff = new RoleSelectMenuBuilder().setCustomId("d7_tk_staff")
+    .setPlaceholder(`👮 رتب الدعم — الحالي: ${(t.staffRoles || []).length} رتبة`)
+    .setMinValues(0).setMaxValues(10);
+  if ((t.staffRoles || []).length) staff.setDefaultRoles(t.staffRoles);
+
+  return { embeds: [embed("🎫 نظام التذاكر", "كل تذكرة تفتح روم خاص مع أزرار الاستلام والاستدعاء والإغلاق.")], components: [
+    new ActionRowBuilder().addComponents(toggle),
+    new ActionRowBuilder().addComponents(category),
+    new ActionRowBuilder().addComponents(log),
+    new ActionRowBuilder().addComponents(staff),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("panel:publish-tickets").setLabel("📨 إرسال لوحة التذاكر").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary),
+    ),
+  ] };
 }
 
 function productEmbed(product) {
@@ -59,7 +159,7 @@ async function refreshAdminDashboard(guild) {
   const totalOrders = db.prepare("SELECT COUNT(*) n FROM orders WHERE status IN ('confirmed','delivered')").get().n;
   const pending = db.prepare("SELECT COUNT(*) n FROM orders WHERE status='pending'").get().n;
   const revenue = db.prepare(`SELECT COALESCE(SUM(p.price),0) total FROM orders o JOIN products p ON p.id=o.product_id WHERE o.status IN ('confirmed','delivered')`).get().total;
-  const openTickets = db.prepare("SELECT COUNT(*) n FROM tickets WHERE status IN ('open','claimed')").get().n;
+  const openTickets = db.prepare("SELECT COUNT(*) n FROM tickets WHERE status='open'").get().n;
   const top = db.prepare(`SELECT p.name, COUNT(o.id) n FROM products p LEFT JOIN orders o ON o.product_id=p.id AND o.status IN ('confirmed','delivered') GROUP BY p.id ORDER BY n DESC, p.name LIMIT 8`).all();
   const body = top.length ? top.map((x, i) => `**${i+1}. ${x.name}** — ${x.n} purchase(s)`).join("\n") : "No products yet.";
   const e = embed("D7 Dev • Admin Dashboard", "Live store overview. Use the admin commands to manage products and orders.")
@@ -76,81 +176,47 @@ async function refreshAdminDashboard(guild) {
   else await channel.send({ embeds: [e] }).catch(() => {});
 }
 
-async function createTicket(interaction, topic) {
+// ─────────── تأكيد طلب: يعطي الرول وينبّه روم الطلبات ───────────
+async function confirmOrder(interaction, id) {
+  const order = db.prepare("SELECT o.*, p.name, p.role_id, p.price, p.currency FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=?").get(id);
+  if (!order) return interaction.reply({ content: "الطلب غير موجود.", ephemeral: true });
+  if (order.status !== "pending") return interaction.reply({ content: `هذا الطلب حالته **${order.status}** بالفعل.`, ephemeral: true });
   const guild = interaction.guild;
-  const existing = db.prepare("SELECT channel_id FROM tickets WHERE guild_id=? AND user_id=? AND status IN ('open','claimed')").get(guild.id, interaction.user.id);
-  if (existing) {
-    return interaction.reply({ content: `You already have an open ticket: <#${existing.channel_id}>`, ephemeral: true });
+  const member = await guild.members.fetch(order.user_id).catch(() => null);
+  if (!member) return interaction.reply({ content: "العميل مو عضو في هذا السيرفر.", ephemeral: true });
+  if (order.role_id) await member.roles.add(order.role_id, `D7 Dev order #${id} confirmed`).catch(() => {});
+  db.prepare("UPDATE orders SET status='confirmed',confirmed_at=CURRENT_TIMESTAMP,confirmed_by=? WHERE id=?").run(interaction.user.id, id);
+  if (config.purchase.sendThankYouDM) {
+    await member.send({ embeds: [embed("Thank you for your purchase!", `Your purchase of **${order.name}** has been confirmed.\nOrder: #${id}\nProduct role: ${order.role_id ? `<@&${order.role_id}>` : "No role configured"}`)] }).catch(() => {});
   }
-  const categoryId = config.tickets?.categoryId;
-  const channel = await guild.channels.create({
-    name: `ticket-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 90),
-    type: ChannelType.GuildText,
-    parent: safeChannelId(categoryId) ? categoryId : undefined,
-    topic: `D7 ticket | User ${interaction.user.id} | Topic ${topic}`,
-    permissionOverwrites: [
-      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-      { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
-      ...[...(config.roles.staff || []), ...(config.roles.admin || [])].filter(safeChannelId).map(id => ({ id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }))
-    ]
+  if (config.purchase.sendProductReviewDM) {
+    const row = new ActionRowBuilder().addComponents(...[1,2,3,4,5].map(n => new ButtonBuilder().setCustomId(`product_rate:${id}:${n}`).setLabel(`${n} ★`).setStyle(n >= 4 ? ButtonStyle.Success : ButtonStyle.Secondary)));
+    await member.send({ content: `Please rate **${order.name}** (Order #${id}).`, components: [row] }).catch(() => {});
+  }
+  // إشعار روم الطلبات: "فلان اشترى هذا المنتج"
+  await sendToConfiguredChannel(guild, "orders", {
+    embeds: [embed("🛒 شراء جديد", [
+      `**اشترى العضو:** <@${order.user_id}>`,
+      `**المنتج:** ${order.name}`,
+      `**السعر:** ${formatPrice(order.price, order.currency)}`,
+      `**الطلب:** #${id}`,
+      order.role_id ? `**الرول المُعطي:** <@&${order.role_id}>` : "",
+      `**أكده:** ${interaction.user}`,
+    ].filter(Boolean).join("\n"))],
   });
-  const result = db.prepare("INSERT INTO tickets (guild_id,channel_id,user_id,topic) VALUES (?,?,?,?)").run(guild.id, channel.id, interaction.user.id, topic);
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`ticket_claim:${result.lastInsertRowid}`).setLabel("Claim ticket").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`ticket_call:${result.lastInsertRowid}`).setLabel("Call customer").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`ticket_close:${result.lastInsertRowid}`).setLabel("Close ticket").setStyle(ButtonStyle.Danger)
-  );
-  await channel.send({ content: `<@${interaction.user.id}>`, embeds: [embed(`Ticket #${result.lastInsertRowid}`, `**Topic:** ${topic}\nDescribe what you need help with. Staff can claim this ticket below.`)], components: [row] });
-  await interaction.reply({ content: `Ticket created: ${channel}`, ephemeral: true });
-  await sendToConfiguredChannel(guild, "ticketLogs", { embeds: [embed("Ticket opened", `Ticket: ${channel}\nCustomer: <@${interaction.user.id}>\nTopic: ${topic}`)] });
   await refreshAdminDashboard(guild);
+  return interaction.reply({ content: `✅ تم تأكيد الطلب #${id} وأعطيت ${member} رول **${order.name}**.`, ephemeral: true });
 }
 
-async function makeTranscript(channel) {
-  const all = [];
-  let before;
-  for (let page = 0; page < 10; page++) {
-    const batch = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
-    if (!batch || batch.size === 0) break;
-    all.push(...batch.values());
-    before = batch.last().id;
-    if (batch.size < 100) break;
-  }
-  all.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-  return all.map(m => {
-    const time = new Date(m.createdTimestamp).toISOString();
-    const text = m.content || "";
-    const files = [...m.attachments.values()].map(a => a.url).join(" ");
-    const embeds = m.embeds.map(e => `[Embed: ${e.title || ""} ${e.description || ""}]`).join(" ");
-    return `[${time}] ${m.author?.tag || "Unknown"} (${m.author?.id || "?"}): ${text} ${files} ${embeds}`.trim();
-  }).join("\n");
-}
-
-async function closeTicket(interaction, ticketId) {
-  const ticket = db.prepare("SELECT * FROM tickets WHERE id=?").get(ticketId);
-  if (!ticket || ticket.status === "closed") return interaction.reply({ content: "This ticket is already closed.", ephemeral: true });
-  if (!hasStaff(interaction.member) && interaction.user.id !== ticket.user_id) {
-    return interaction.reply({ content: "Only the ticket owner or staff can close this ticket.", ephemeral: true });
-  }
-  await interaction.reply({ content: "Closing ticket and preparing transcript…", ephemeral: true });
-  const transcript = await makeTranscript(interaction.channel);
-  const fileName = `${cleanFileName(`ticket-${ticketId}`)}.txt`;
-  const attachment = new AttachmentBuilder(Buffer.from(transcript || "No messages captured.", "utf8"), { name: fileName });
-  await sendToConfiguredChannel(interaction.guild, "ticketTranscripts", { content: `Transcript for ticket #${ticketId} — customer <@${ticket.user_id}>`, files: [attachment] });
-  const user = await client.users.fetch(ticket.user_id).catch(() => null);
-  if (user) {
-    await user.send({ content: `Your D7 Dev ticket #${ticketId} has been closed. Here is the conversation transcript.`, files: [new AttachmentBuilder(Buffer.from(transcript || "No messages captured.", "utf8"), { name: fileName })] }).catch(() => {});
-    if (config.tickets?.closeRatingEnabled) {
-      const row = new ActionRowBuilder().addComponents(
-        ...[1,2,3,4,5].map(n => new ButtonBuilder().setCustomId(`ticket_rate:${ticketId}:${n}`).setLabel(`${n} ★`).setStyle(n >= 4 ? ButtonStyle.Success : ButtonStyle.Secondary))
-      );
-      await user.send({ content: `Please rate your support experience for ticket #${ticketId}.`, components: [row] }).catch(() => {});
-    }
-  }
-  db.prepare("UPDATE tickets SET status='closed',closed_at=CURRENT_TIMESTAMP WHERE id=?").run(ticketId);
-  await sendToConfiguredChannel(interaction.guild, "ticketLogs", { embeds: [embed("Ticket closed", `Ticket #${ticketId}\nCustomer: <@${ticket.user_id}>\nClosed by: ${interaction.user}`)] });
-  if (config.tickets?.deleteAfterClose) setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
-  await refreshAdminDashboard(interaction.guild);
+// ─────────── حفظ المنتج بعد اختيار الرول ───────────
+async function finishProduct(interaction, roleId) {
+  const pending = pendingProduct.get(interaction.user.id);
+  if (!pending) return interaction.reply({ content: "انتهت مهلة إضافة المنتج. أعد الأمر /product-add.", ephemeral: true });
+  pendingProduct.delete(interaction.user.id);
+  const res = db.prepare("INSERT INTO products (name,price,role_id) VALUES (?,?,?)").run(pending.name, pending.price, roleId || "");
+  const message = `✅ أُضيف المنتج **${pending.name}** برقم \`#${res.lastInsertRowid}\` — ${formatPrice(pending.price)}${roleId ? `\nالرول: <@&${roleId}>` : "\nبدون رول"}`;
+  if (interaction.deferred || interaction.replied) return interaction.editReply({ content: message, embeds: [], components: [] }).catch(() => {});
+  return interaction.reply({ content: message, ephemeral: true });
 }
 
 client.once(Events.ClientReady, async c => {
@@ -181,29 +247,11 @@ client.on(Events.InteractionCreate, async interaction => {
       const { commandName } = interaction;
       if (commandName === "panel") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-        const row1 = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId("panel:products").setLabel("Products").setEmoji("🛍️").setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId("panel:orders").setLabel("Orders").setEmoji("🧾").setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId("panel:tickets").setLabel("Tickets").setEmoji("🎫").setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId("panel:content").setLabel("Messages & Embeds").setEmoji("📝").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("panel:analytics").setLabel("Analytics").setEmoji("📊").setStyle(ButtonStyle.Secondary)
-        );
-        const row2 = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId("panel:welcome").setLabel("Welcome Settings").setEmoji("👋").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("panel:refresh").setLabel("Refresh Dashboard").setEmoji("🔄").setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId("panel:autoroles").setLabel("Automatic Roles").setEmoji("🏷️").setStyle(ButtonStyle.Secondary)
-        );
-        const e = embed("D7 Dev • Control Center", "Manage the store and server from this panel. Choose a section below.\n\n**Products:** add items, update status and publish showcase.\n**Orders:** review requests, confirm payments and mark delivery.\n**Tickets:** publish the ticket panel and manage support.\n**Messages:** send news, rules, updates and custom embeds.\n**Analytics:** sales, ratings and top products.\n\nOnly staff with configured staff/admin roles can use this panel.");
-        return interaction.reply({ embeds: [e], components: [row1, row2], ephemeral: true });
+        return interaction.reply({ ...mainPanel(), ephemeral: true });
       }
       if (commandName === "ticket-panel") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId("ticket_open:Support").setLabel("Support").setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId("ticket_open:Purchase").setLabel("Purchase").setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId("ticket_open:Technical").setLabel("Technical").setStyle(ButtonStyle.Secondary)
-        );
-        return interaction.reply({ embeds: [embed("D7 Dev Support", "Choose a ticket category below.")], components: [row] });
+        return interaction.reply({ embeds: [tickets.panelEmbed()], components: tickets.panelRows() });
       }
       if (commandName === "products") {
         const products = db.prepare("SELECT * FROM products ORDER BY id DESC").all();
@@ -214,12 +262,16 @@ client.on(Events.InteractionCreate, async interaction => {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
         const name = interaction.options.getString("name", true);
         const price = interaction.options.getNumber("price", true);
-        const description = interaction.options.getString("description") || "";
-        const roleId = interaction.options.getRole("role")?.id || "";
-        const imageUrl = interaction.options.getString("image") || "";
-        const downloadUrl = interaction.options.getString("download") || "";
-        const res = db.prepare("INSERT INTO products (name,price,description,role_id,image_url,download_url) VALUES (?,?,?,?,?,?)").run(name, price, description, roleId, imageUrl, downloadUrl);
-        return interaction.reply({ content: `Product **${name}** created with ID \`${res.lastInsertRowid}\`.`, ephemeral: true });
+        pendingProduct.set(interaction.user.id, { name, price });
+        const rows = [
+          new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder()
+            .setCustomId("d7_prod_role").setPlaceholder("اختر رول المنتج (يُعطى للعميل بعد تأكيد الدفع)").setMinValues(1).setMaxValues(1)),
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId("d7_prod_role_skip").setLabel("بدون رول").setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId("d7_prod_role_cancel").setLabel("إلغاء").setStyle(ButtonStyle.Danger)
+          ),
+        ];
+        return interaction.reply({ embeds: [embed("🛍️ إضافة منتج", `**${name}** — ${formatPrice(price)}\n\nاختر رول المنتج من القائمة بالأسفل.`)], components: rows });
       }
       if (commandName === "product-edit") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -234,11 +286,12 @@ client.on(Events.InteractionCreate, async interaction => {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
         const products = db.prepare("SELECT * FROM products ORDER BY id DESC").all();
         if (!products.length) return interaction.reply({ content: "Add products first using /product-add.", ephemeral: true });
-        await interaction.reply({ content: `Publishing ${Math.min(products.length, 10)} product(s)…`, ephemeral: true });
-        for (const product of products.slice(0, 10)) {
-          await sendToConfiguredChannel(interaction.guild, "productShowcase", { embeds: [productEmbed(product)], components: productPanelRows(product.id) });
-        }
-        return;
+        return interaction.reply({
+          embeds: [embed("🛍️ نشر المنتجات", `في ${Math.min(products.length, 10)} منتج.\nاختر الروم الذي تريد نشر المنتجات فيه.`)],
+          components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder()
+            .setCustomId("d7_showcase_channel").setPlaceholder("اختر روم عرض المنتجات")
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1))],
+        });
       }
       if (commandName === "order-create") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -251,24 +304,7 @@ client.on(Events.InteractionCreate, async interaction => {
       }
       if (commandName === "order-confirm") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-        const id = interaction.options.getInteger("order_id", true);
-        const order = db.prepare("SELECT o.*, p.name, p.role_id, p.price, p.currency FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=?").get(id);
-        if (!order) return interaction.reply({ content: "Order not found.", ephemeral: true });
-        const guild = interaction.guild;
-        const member = await guild.members.fetch(order.user_id).catch(() => null);
-        if (!member) return interaction.reply({ content: "Customer is not a member of this server.", ephemeral: true });
-        if (order.role_id) await member.roles.add(order.role_id, `D7 Dev order #${id} confirmed`);
-        db.prepare("UPDATE orders SET status='confirmed',confirmed_at=CURRENT_TIMESTAMP,confirmed_by=? WHERE id=?").run(interaction.user.id, id);
-        if (config.purchase.sendThankYouDM) {
-          await member.send({ embeds: [embed("Thank you for your purchase!", `Your purchase of **${order.name}** has been confirmed.\nOrder: #${id}\nProduct role: ${order.role_id ? `<@&${order.role_id}>` : "No role configured"}`)] }).catch(() => {});
-        }
-        if (config.purchase.sendProductReviewDM) {
-          const row = new ActionRowBuilder().addComponents(...[1,2,3,4,5].map(n => new ButtonBuilder().setCustomId(`product_rate:${id}:${n}`).setLabel(`${n} ★`).setStyle(n >= 4 ? ButtonStyle.Success : ButtonStyle.Secondary)));
-          await member.send({ content: `Please rate **${order.name}** (Order #${id}).`, components: [row] }).catch(() => {});
-        }
-        await sendToConfiguredChannel(guild, "orders", { embeds: [embed("Order confirmed", `Order #${id}\nCustomer: <@${order.user_id}>\nProduct: **${order.name}**\nPrice: ${formatPrice(order.price, order.currency)}\nConfirmed by: ${interaction.user}`)] });
-        await refreshAdminDashboard(guild);
-        return interaction.reply({ content: `Order #${id} confirmed. Product role assigned if configured.`, ephemeral: true });
+        return confirmOrder(interaction, interaction.options.getInteger("order_id", true));
       }
       if (commandName === "order-deliver") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -365,19 +401,14 @@ client.on(Events.InteractionCreate, async interaction => {
           const modal = new ModalBuilder().setCustomId("panel_modal:add-product").setTitle("Add Store Product");
           modal.addComponents(
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("name").setLabel("Product name").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("price").setLabel("Price in SAR").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(20)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("description").setLabel("Description").setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(1000)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("role").setLabel("Product role ID (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("image").setLabel("Image URL (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(300))
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("price").setLabel("Price in SAR").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(20))
           );
           return interaction.showModal(modal);
         }
         if (section === "publish-products") {
           const products = db.prepare("SELECT * FROM products ORDER BY id DESC").all();
           if (!products.length) return interaction.reply({ content: "Add products first from the Products section.", ephemeral: true });
-          let sent = 0;
-          for (const product of products.slice(0, 10)) if (await sendToConfiguredChannel(interaction.guild, "productShowcase", { embeds: [productEmbed(product)], components: productPanelRows(product.id) })) sent++;
-          return interaction.reply({ content: `Published ${sent} product card(s). Check the productShowcase channel ID in config.json if none were sent.`, ephemeral: true });
+          return interaction.reply({ content: "اختر الروم الذي تريد نشر المنتجات فيه:", components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId("d7_showcase_channel").setPlaceholder("اختر روم عرض المنتجات").addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1))] });
         }
         if (section === "products-list") {
           const products = db.prepare("SELECT * FROM products ORDER BY id DESC LIMIT 10").all();
@@ -385,24 +416,28 @@ client.on(Events.InteractionCreate, async interaction => {
         }
         if (section === "orders") {
           const rows = db.prepare(`SELECT o.*,p.name product_name,p.price,p.currency FROM orders o JOIN products p ON p.id=o.product_id ORDER BY o.id DESC LIMIT 10`).all();
-          const desc = rows.length ? rows.map(o => `**#${o.id} — ${o.product_name}** · <@${o.user_id}> · ${o.status} · ${formatPrice(o.price,o.currency)}\nRating: ${o.rating ? `${o.rating}/5` : "Not rated"}`).join("\n\n") : "No orders yet.";
-          return interaction.update({ embeds: [embed("Control Center · Orders", `${desc}\n\nConfirm payments or mark orders delivered using the order commands.`)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:orders-pending").setLabel("Pending Orders").setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId("panel:orders").setLabel("Refresh").setStyle(ButtonStyle.Primary))] });
+          const desc = rows.length ? rows.map(o => `**#${o.id}** · ${o.product_name} · <@${o.user_id}> · **${o.status}** · ${formatPrice(o.price,o.currency)}\n⭐ ${o.rating ? `${o.rating}/5` : "بدون تقييم"}`).join("\n") : "No orders yet.";
+          const pending = db.prepare(`SELECT o.id,o.user_id,p.name product_name,p.price,p.currency FROM orders o JOIN products p ON p.id=o.product_id WHERE o.status='pending' ORDER BY o.id DESC LIMIT 20`).all();
+          const rowsOut = [];
+          if (pending.length) {
+            rowsOut.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+              .setCustomId("d7_order_confirm").setPlaceholder("✅ اختر طلب لتأكيد الدفع وإعطائه الرول").setMinValues(1).setMaxValues(1)
+              .addOptions(pending.map(o => new StringSelectMenuOptionBuilder()
+                .setLabel(`#${o.id} — ${o.product_name}`.slice(0, 100))
+                .setDescription(`${o.user_id} • ${formatPrice(o.price,o.currency)}`.slice(0, 100))
+                .setValue(String(o.id))))));
+          }
+          rowsOut.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId("panel:orders").setLabel("🔄 تحديث").setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary)
+          ));
+          return interaction.update({ embeds: [embed("🧾 الطلبات", `${desc}\n\nأكّد الدفع من القائمة بالأعلى، والعميل ياخذ رول المنتج تلقائياً.`)], components: rowsOut });
         }
-        if (section === "orders-pending") {
-          const rows = db.prepare(`SELECT o.id,o.user_id,p.name product_name,p.price,p.currency FROM orders o JOIN products p ON p.id=o.product_id WHERE o.status='pending' ORDER BY o.id DESC LIMIT 10`).all();
-          const desc = rows.length ? rows.map(o => `**#${o.id} — ${o.product_name}** · <@${o.user_id}> · ${formatPrice(o.price,o.currency)}`).join("\n") : "No pending orders.";
-          return interaction.update({ embeds: [embed("Pending Orders", `${desc}\n\nUse /order-confirm with the order ID after checking payment.`)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:orders").setLabel("All Orders").setStyle(ButtonStyle.Primary))] });
-        }
-        if (section === "tickets") {
-          const open = db.prepare("SELECT COUNT(*) n FROM tickets WHERE status IN ('open','claimed')").get().n;
-          const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:publish-tickets").setLabel("Publish Ticket Panel").setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId("panel:ticket-stats").setLabel("Open Ticket Count").setStyle(ButtonStyle.Secondary));
-          return interaction.update({ embeds: [embed("Control Center · Tickets", `Currently open/claimed tickets: **${open}**\nUse Publish Ticket Panel to post the customer-facing ticket menu in this channel. Ticket claim/call/close controls are inside each ticket.`)], components: [row] });
-        }
+        if (section === "tickets") return interaction.update(ticketsSection());
+        if (section === "channels") return interaction.update(channelsSection());
         if (section === "publish-tickets") {
-          const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("ticket_open:Support").setLabel("Support").setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId("ticket_open:Purchase").setLabel("Purchase").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("ticket_open:Technical").setLabel("Technical").setStyle(ButtonStyle.Secondary));
-          return interaction.reply({ embeds: [embed("D7 Dev Support", "Choose a ticket category below.")], components: [row], ephemeral: false });
+          return interaction.reply({ embeds: [tickets.panelEmbed()], components: tickets.panelRows(), ephemeral: false });
         }
-        if (section === "ticket-stats") return interaction.reply({ content: `Open/claimed tickets: ${db.prepare("SELECT COUNT(*) n FROM tickets WHERE status IN ('open','claimed')").get().n}`, ephemeral: true });
         if (section === "content") {
           const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:news").setLabel("Post News").setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId("panel:rules").setLabel("Post Rules").setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId("panel:update").setLabel("Post Update").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("panel:embed").setLabel("Custom Embed").setStyle(ButtonStyle.Secondary));
           return interaction.update({ embeds: [embed("Control Center · Messages", "Choose the message type to create. Images are optional; use a direct image URL.")], components: [row] });
@@ -449,40 +484,12 @@ client.on(Events.InteractionCreate, async interaction => {
           ];
           return interaction.update({ embeds: [embed("Automatic Role Settings", `Automatic roles are now **${enabledText}**.\nMember role: ${config.autoRoles.memberRoleId ? `<@&${config.autoRoles.memberRoleId}>` : "Not set"}\nBot role: ${config.autoRoles.botRoleId ? `<@&${config.autoRoles.botRoleId}>` : "Not set"}`)], components: rows });
         }
-        if (section === "home") {
-          const row1 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:products").setLabel("Products").setEmoji("🛍️").setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId("panel:orders").setLabel("Orders").setEmoji("🧾").setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId("panel:tickets").setLabel("Tickets").setEmoji("🎫").setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId("panel:content").setLabel("Messages & Embeds").setEmoji("📝").setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId("panel:analytics").setLabel("Analytics").setEmoji("📊").setStyle(ButtonStyle.Secondary));
-          const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:welcome").setLabel("Welcome Settings").setEmoji("👋").setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId("panel:refresh").setLabel("Refresh Dashboard").setEmoji("🔄").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("panel:autoroles").setLabel("Automatic Roles").setEmoji("🏷️").setStyle(ButtonStyle.Secondary));
-          return interaction.update({ embeds: [embed("D7 Dev • Control Center", "Manage products, orders, tickets, messages, analytics, welcome settings and automatic join roles from here.")], components: [row1,row2] });
-        }
+        if (section === "home") return interaction.update(mainPanel());
         if (section === "refresh") {
           await refreshAdminDashboard(interaction.guild);
           return interaction.reply({ content: "Admin dashboard refreshed where configured.", ephemeral: true });
         }
       }
-      if (action === "ticket_open") return createTicket(interaction, parts.join(":"));
-      if (action === "ticket_claim") {
-        if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-        const id = Number(parts[0]);
-        const ticket = db.prepare("SELECT * FROM tickets WHERE id=?").get(id);
-        if (!ticket || ticket.status === "closed") return interaction.reply({ content: "Ticket not active.", ephemeral: true });
-        if (config.tickets?.staffCanClaimOnlyOne) {
-          const other = db.prepare("SELECT id FROM tickets WHERE claimed_by=? AND status='claimed' AND id<>?").get(interaction.user.id, id);
-          if (other) return interaction.reply({ content: `You already claimed ticket #${other.id}. Close or unclaim it first.`, ephemeral: true });
-        }
-        db.prepare("UPDATE tickets SET status='claimed',claimed_by=?,claimed_at=CURRENT_TIMESTAMP WHERE id=?").run(interaction.user.id, id);
-        await interaction.reply({ embeds: [embed("Ticket claimed", `Claimed by ${interaction.user}.`)] });
-        await sendToConfiguredChannel(interaction.guild, "ticketLogs", { embeds: [embed("Ticket claimed", `Ticket #${id}\nStaff: ${interaction.user}`)] });
-        return;
-      }
-      if (action === "ticket_call") {
-        if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-        const ticket = db.prepare("SELECT * FROM tickets WHERE id=?").get(Number(parts[0]));
-        if (!ticket) return interaction.reply({ content: "Ticket not found.", ephemeral: true });
-        const user = await client.users.fetch(ticket.user_id).catch(() => null);
-        if (user) await user.send(`A staff member is waiting for you in your D7 Dev ticket: <#${ticket.channel_id}>`).catch(() => {});
-        return interaction.reply({ content: "Customer has been called by DM if their DMs are open.", ephemeral: true });
-      }
-      if (action === "ticket_close") return closeTicket(interaction, Number(parts[0]));
       if (action === "product_info") {
         const p = db.prepare("SELECT * FROM products WHERE id=?").get(Number(parts[0]));
         if (!p) return interaction.reply({ content: "Product not found.", ephemeral: true });
@@ -507,14 +514,94 @@ client.on(Events.InteractionCreate, async interaction => {
         modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("review").setLabel("Your review (optional)").setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(1000)));
         return interaction.showModal(modal);
       }
-      if (action === "ticket_rate") {
-        const ticketId = Number(parts[0]), rating = Number(parts[1]);
-        const ticket = db.prepare("SELECT * FROM tickets WHERE id=? AND user_id=? AND status='closed'").get(ticketId, interaction.user.id);
-        if (!ticket) return interaction.reply({ content: "Ticket not found or not closed.", ephemeral: true });
-        const modal = new ModalBuilder().setCustomId(`review_modal:ticket:${ticketId}:${rating}`).setTitle("Rate support");
-        modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("review").setLabel("Your review (optional)").setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(1000)));
-        return interaction.showModal(modal);
+    }
+
+    // ─────────── تأكيد طلب من اللوحة ───────────
+    if (interaction.isStringSelectMenu() && interaction.customId === "d7_order_confirm") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      await confirmOrder(interaction, Number(interaction.values[0]));
+      return;
+    }
+
+    // ─────────── اختيار رول المنتج (الخطوة الثانية من إضافة منتج) ───────────
+    if (interaction.isRoleSelectMenu() && interaction.customId === "d7_prod_role") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      return finishProduct(interaction, interaction.values[0]);
+    }
+    if (interaction.isButton() && interaction.customId === "d7_prod_role_skip") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      return finishProduct(interaction, "");
+    }
+    if (interaction.isButton() && interaction.customId === "d7_prod_role_cancel") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      pendingProduct.delete(interaction.user.id);
+      return interaction.update({ content: "❌ تم إلغاء إضافة المنتج.", embeds: [], components: [] }).catch(() => {});
+    }
+
+    // ─────────── اختيار روم نشر المنتجات ───────────
+    if (interaction.isChannelSelectMenu() && interaction.customId === "d7_showcase_channel") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const channelId = interaction.values[0];
+      config.channels ||= {};
+      config.channels.productShowcase = channelId;
+      saveConfig();
+      const products = db.prepare("SELECT * FROM products ORDER BY id DESC").all();
+      let sent = 0;
+      for (const product of products.slice(0, 10)) {
+        await interaction.guild.channels.cache.get(channelId)?.send({ embeds: [productEmbed(product)], components: productPanelRows(product.id) }).then(() => sent++).catch(() => {});
       }
+      return interaction.reply({ content: `✅ تم نشر ${sent} منتج في <#${channelId}>.`, ephemeral: true });
+    }
+
+    // ─────────── اختيار رومات التنبيهات والنشر ───────────
+    if (interaction.isChannelSelectMenu() && interaction.customId.startsWith("d7_ch_")) {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const map = { "d7_ch_orders": "orders", "d7_ch_sales": "salesLogs", "d7_showcase_channel": "productShowcase", "d7_ch_showcase": "productShowcase", "d7_ch_reviews": "reviews" };
+      const key = map[interaction.customId];
+      if (!key) return;
+      config.channels ||= {};
+      config.channels[key] = interaction.values[0];
+      saveConfig();
+      return interaction.reply({ content: `✅ تم تحديد <#${interaction.values[0]}>.`, ephemeral: true });
+    }
+
+    // ─────────── لوحة التذاكر: فتح تذكرة ───────────
+    if (interaction.isStringSelectMenu() && interaction.customId === "d7_ticket_type") {
+      return tickets.handleSelect(interaction);
+    }
+
+    // ─────────── أزرار التذاكر داخل الروم ───────────
+    if (interaction.isButton() && (interaction.customId === "d7_tk_claim" || interaction.customId === "d7_tk_summon" || interaction.customId === "d7_tk_close")) {
+      if (interaction.customId === "d7_tk_claim") return tickets.handleClaim(interaction);
+      if (interaction.customId === "d7_tk_summon") return tickets.handleSummon(interaction);
+      return tickets.handleClose(interaction);
+    }
+
+    // ─────────── إعدادات التذاكر من اللوحة ───────────
+    if (interaction.isStringSelectMenu() && interaction.customId === "d7_tk_toggle") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const on = new Set(interaction.values);
+      for (const t of tickets.types()) t.enabled = on.has(t.id);
+      tickets.saveConfig();
+      return interaction.update(ticketsSection());
+    }
+    if (interaction.isChannelSelectMenu() && interaction.customId === "d7_tk_category") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      tickets.ensureConfig().categoryId = interaction.values[0];
+      tickets.saveConfig();
+      return interaction.update(ticketsSection());
+    }
+    if (interaction.isChannelSelectMenu() && interaction.customId === "d7_tk_log") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      tickets.ensureConfig().logChannelId = interaction.values[0];
+      tickets.saveConfig();
+      return interaction.update(ticketsSection());
+    }
+    if (interaction.isRoleSelectMenu() && interaction.customId === "d7_tk_staff") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      tickets.ensureConfig().staffRoles = interaction.values;
+      tickets.saveConfig();
+      return interaction.update(ticketsSection());
     }
 
     if (interaction.isModalSubmit() && interaction.customId.startsWith("panel_modal:")) {
@@ -523,14 +610,18 @@ client.on(Events.InteractionCreate, async interaction => {
       if (kind === "add-product") {
         const name = interaction.fields.getTextInputValue("name").trim();
         const price = Number(interaction.fields.getTextInputValue("price").replace(/,/g, ""));
-        const description = interaction.fields.getTextInputValue("description") || "";
-        const roleId = (interaction.fields.getTextInputValue("role") || "").trim();
-        const imageUrl = (interaction.fields.getTextInputValue("image") || "").trim();
-        if (!Number.isFinite(price) || price < 0) return interaction.reply({ content: "Price must be a valid number, e.g. 150 or 150.50.", ephemeral: true });
-        if (roleId && !/^\d{17,20}$/.test(roleId)) return interaction.reply({ content: "Role ID is invalid. Leave it blank or enter the role ID.", ephemeral: true });
-        if (imageUrl && !/^https?:\/\//i.test(imageUrl)) return interaction.reply({ content: "Image must be a direct http/https URL.", ephemeral: true });
-        const res = db.prepare("INSERT INTO products (name,price,description,role_id,image_url) VALUES (?,?,?,?,?)").run(name, price, description, roleId, imageUrl);
-        return interaction.reply({ content: `Product **${name}** added successfully. ID: #${res.lastInsertRowid}.`, ephemeral: true });
+        if (!Number.isFinite(price) || price < 0) return interaction.reply({ content: "السعر لازم يكون رقم صحيح، مثال: 150 أو 150.50", ephemeral: true });
+        pendingProduct.set(interaction.user.id, { name, price });
+        return interaction.reply({
+          embeds: [embed("🛍️ إضافة منتج", `**${name}** — ${formatPrice(price)}\n\nاختر رول المنتج من القائمة بالأسفل.`)],
+          components: [
+            new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId("d7_prod_role").setPlaceholder("اختر رول المنتج (يُعطى للعميل بعد تأكيد الدفع)").setMinValues(1).setMaxValues(1)),
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId("d7_prod_role_skip").setLabel("بدون رول").setStyle(ButtonStyle.Secondary),
+              new ButtonBuilder().setCustomId("d7_prod_role_cancel").setLabel("إلغاء").setStyle(ButtonStyle.Danger)
+            ),
+          ],
+        });
       }
       if (kind === "welcome") {
         config.welcome.message = interaction.fields.getTextInputValue("body");
@@ -569,14 +660,6 @@ client.on(Events.InteractionCreate, async interaction => {
         await sendToConfiguredChannel(interaction.guild, "reviews", { embeds: [embed("Product review", `Product: **${order.product_name}**\nCustomer: <@${interaction.user.id}>\nRating: ${rating}/5\nReview: ${review || "No written comment."}`)] });
         await refreshAdminDashboard(interaction.guild);
         return interaction.reply({ content: "Thank you! Your product review has been saved.", ephemeral: true });
-      }
-      if (type === "ticket") {
-        const ticket = db.prepare("SELECT * FROM tickets WHERE id=? AND user_id=?").get(id, interaction.user.id);
-        if (!ticket) return interaction.reply({ content: "Ticket not found.", ephemeral: true });
-        db.prepare("UPDATE tickets SET rating=?,review=? WHERE id=?").run(rating, review, id);
-        db.prepare("INSERT INTO ticket_ratings (ticket_id,user_id,rating,review) VALUES (?,?,?,?)").run(id, interaction.user.id, rating, review);
-        await sendToConfiguredChannel(interaction.guild, "reviews", { embeds: [embed("Support review", `Ticket: #${id}\nCustomer: <@${interaction.user.id}>\nRating: ${rating}/5\nReview: ${review || "No written comment."}`)] });
-        return interaction.reply({ content: "Thank you for rating D7 Dev support.", ephemeral: true });
       }
     }
   } catch (err) {

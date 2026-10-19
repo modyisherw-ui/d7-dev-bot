@@ -28,10 +28,13 @@
   },
   "tickets": {
     "categoryId": "",
-    "staffCanClaimOnlyOne": true,
-    "claimReminderMinutes": 30,
-    "closeRatingEnabled": true,
-    "deleteAfterClose": false
+    "logChannelId": "",
+    "staffRoles": [],
+    "panel": {
+      "title": "🎫 D7 Dev Support",
+      "description": "اختر نوع التذكرة من القائمة بالأسفل."
+    },
+    "ticketTypes": []
   },
   "purchase": {
     "manualConfirmation": true,

@@ -7,11 +7,7 @@ const commands = [
   new SlashCommandBuilder().setName("products").setDescription("List products"),
   new SlashCommandBuilder().setName("product-add").setDescription("Add a store product")
     .addStringOption(o=>o.setName("name").setDescription("Product name").setRequired(true))
-    .addNumberOption(o=>o.setName("price").setDescription("Price in SAR").setRequired(true).setMinValue(0))
-    .addStringOption(o=>o.setName("description").setDescription("Product description"))
-    .addRoleOption(o=>o.setName("role").setDescription("Role granted after payment confirmation"))
-    .addStringOption(o=>o.setName("image").setDescription("Image URL"))
-    .addStringOption(o=>o.setName("download").setDescription("Download URL (keep private where possible)")),
+    .addNumberOption(o=>o.setName("price").setDescription("Price in SAR").setRequired(true).setMinValue(0)),
   new SlashCommandBuilder().setName("product-edit").setDescription("Change product availability")
     .addIntegerOption(o=>o.setName("id").setDescription("Product ID").setRequired(true).setMinValue(1))
     .addStringOption(o=>o.setName("status").setDescription("New status").setRequired(true)

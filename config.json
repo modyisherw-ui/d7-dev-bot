@@ -1,0 +1,54 @@
+{
+  "brand": {
+    "name": "D7 Dev",
+    "color": "#19D7CC",
+    "footer": "D7 Dev • Store System"
+  },
+  "channels": {
+    "welcome": "",
+    "news": "",
+    "rules": "",
+    "updates": "",
+    "productShowcase": "",
+    "reviews": "",
+    "orders": "",
+    "ticketPanel": "",
+    "ticketLogs": "",
+    "ticketTranscripts": "",
+    "adminDashboard": "",
+    "salesLogs": ""
+  },
+  "roles": {
+    "staff": [],
+    "admin": [],
+    "member": "",
+    "verified": "",
+    "waiting": "",
+    "muted": ""
+  },
+  "tickets": {
+    "categoryId": "",
+    "staffCanClaimOnlyOne": true,
+    "claimReminderMinutes": 30,
+    "closeRatingEnabled": true,
+    "deleteAfterClose": false
+  },
+  "purchase": {
+    "manualConfirmation": true,
+    "sendProductReviewDM": true,
+    "sendThankYouDM": true
+  },
+  "welcome": {
+    "enabled": true,
+    "message": "Welcome {user} to **D7 Dev**! Please read the rules.",
+    "imageUrl": ""
+  },
+  "permissions": {
+    "adminUserIds": []
+  },
+  "autoRoles": {
+    "enabled": false,
+    "memberRoleId": "",
+    "botRoleId": ""
+  }
+}

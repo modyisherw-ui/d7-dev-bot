@@ -1,0 +1,77 @@
+name: Run D7 Dev Bot 24/7
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  schedule:
+    # كل نص ساعة: أي فجوة بين التشغيلات ما تتجاوز 30 دقيقة
+    - cron: "*/30 * * * *"
+
+# مجموعة توازٍ واحدة: تشغيل واحد فقط + انتظار واحد (الأحدث يلغي الأقدم)
+concurrency:
+  group: d7-bot-run
+
+permissions:
+  contents: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          # better-sqlite3 يوفر prebuilds لـ Node 22 (أسرع من البناء من المصدر)
+          node-version: 22
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Write .env
+        run: |
+          touch .env
+          echo "DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}" >> .env
+          echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" >> .env
+          echo "GUILD_ID=${{ secrets.GUILD_ID }}" >> .env
+
+      - name: Pull latest data
+        run: |
+          git pull origin main --no-edit || true
+
+      - name: Register slash commands
+        run: npm run deploy
+
+      - name: Run bot with keep-alive
+        run: |
+          set -e
+          mkdir -p data
+          # مفتاح الإيقاف: لو فيه ملف data/stop البوت لا يشتغل نهائياً
+          # لتشغيله من جديد: احذف الملف وادفع أو run workflow يدوياً
+          if [ -f data/stop ]; then
+            echo "STOPPED: data/stop exists. Bot will not run. Delete the file to start it again."
+            exit 0
+          fi
+          git config user.name "d7-bot"
+          git config user.email "d7-bot@users.noreply.github.com"
+
+          ( while true; do sleep 120; git add -A data config.json; if ! git diff --cached --quiet; then git commit -m "chore: sync db $(date -u +%H:%M)" || true; git push origin main || true; fi; done ) &
+          WATCHER=$!
+
+          while true; do
+            if [ -f data/stop ]; then
+              echo "STOPPED: data/stop appeared, shutting down."
+              kill $WATCHER 2>/dev/null || true
+              exit 0
+            fi
+            node src/index.js 2>&1 | tee -a data/bot-live.txt || true
+            echo "[keep-alive] bot exited, restarting in 20s..."
+            sleep 20
+          done

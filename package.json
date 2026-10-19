@@ -1,0 +1,16 @@
+{
+  "name": "d7-dev-discord-bot",
+  "version": "1.0.0",
+  "description": "D7 Dev Discord store, tickets, product roles, reviews, orders and analytics bot",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js"
+  },
+  "engines": { "node": ">=20.0.0" },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.4.7"
+  }
+}

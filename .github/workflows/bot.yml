@@ -12,7 +12,11 @@ on:
 # الإلغاء يصير عند push يدوياً فقط — التشغيل المجدول ما يقطع جلسة شغالة
 # (وبالمقابل push الـ sync ما يسبب إعادة تشغيل لأنه يحمل [skip ci])
 concurrency:
-  group: d7-bot-run
+  # NOTE: the group name is versioned on purpose. If GitHub ever leaves a run
+  # marked "in_progress" after its job finished, that phantom run keeps the
+  # group busy forever and every new run stays queued with no bot online.
+  # Bumping the group name (…-v2, …-v3 …) frees the queue without downtime.
+  group: d7-bot-run-v2
   cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 permissions:

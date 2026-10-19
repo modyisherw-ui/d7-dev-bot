@@ -1,5 +1,5 @@
 require("dotenv").config();
-const { REST, Routes, SlashCommandBuilder, ChannelType } = require("discord.js");
+const { REST, Routes, SlashCommandBuilder, ChannelType, PermissionFlagsBits } = require("discord.js");
 
 const commands = [
   new SlashCommandBuilder().setName("panel").setDescription("Open the unified D7 Dev control panel"),
@@ -36,6 +36,10 @@ const commands = [
     .addStringOption(o=>o.setName("message").setDescription("Message body").setRequired(true))
     .addStringOption(o=>o.setName("image").setDescription("Image URL")),
   new SlashCommandBuilder().setName("stats").setDescription("Product sales and rating statistics"),
+  new SlashCommandBuilder().setName("close").setDescription("قفل الروم اللي كتبت فيه الأمر (يمنع الإرسال والثريدات)")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+  new SlashCommandBuilder().setName("open").setDescription("فتح الروم اللي كتبت فيه الأمر (يرجع الصلاحيات للوضع الطبيعي)")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
   new SlashCommandBuilder().setName("welcome-set").setDescription("Set welcome text and image")
     .addStringOption(o=>o.setName("message").setDescription("Use {user} and {server}").setRequired(true))
     .addStringOption(o=>o.setName("image").setDescription("Image URL"))

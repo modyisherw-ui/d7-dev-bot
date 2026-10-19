@@ -104,9 +104,13 @@ function respondWith(interaction, payload) {
 }
 
 // ─────────── قسم الرومات: اختيار روم الطلبات والتنبيهات ───────────
+// مهم: نعرض الروم المحفوظ كقيمة مختارة (setDefaultChannels) حتى لا يظهر القائمة فاضية
+// بعد الرجوع للقسم — وهذا سبب "ما تنحفظ" اللي كان يظهر للمستخدم.
 function channelRow(id, key, placeholder) {
   const sel = new ChannelSelectMenuBuilder().setCustomId(id).setPlaceholder(placeholder)
     .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1);
+  const current = config.channels?.[key];
+  if (safeChannelId(current)) sel.setDefaultChannels([current]);
   return sel;
 }
 
@@ -120,10 +124,10 @@ function channelsSection() {
     new ActionRowBuilder().addComponents(channelRow("d7_ch_orders", "orders", `🔔 روم تنبيه الطلبات — الحالي: ${chLabel("orders")}`)),
     new ActionRowBuilder().addComponents(channelRow("d7_ch_sales", "salesLogs", `🛒 روم طلبات الشراء — الحالي: ${chLabel("salesLogs")}`)),
     new ActionRowBuilder().addComponents(channelRow("d7_ch_showcase", "productShowcase", `🛍️ روم عرض المنتجات — الحالي: ${chLabel("productShowcase")}`)),
-    new ActionRowBuilder().addComponents(channelRow("d7_ch_reviews", "reviews", `⭐ روم التقييمات — الحالي: ${chLabel("reviews")}`)),
+    // ⚠️ روم التقييمات ما عاد هنا — صار في قسم التقييمات فقط حتى ما يتكرر
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 القائمة الرئيسية").setStyle(ButtonStyle.Secondary)),
   ];
-  return { embeds: [embed("📌 الرومات", "اختر الروم المناسب من كل قائمة — يُحفظ فوراً.")], components: rows };
+  return { embeds: [embed("📌 الرومات", "اختر الروم المناسب من كل قائمة — يُحفظ فوراً.\nروم التقييمات تُحدَّد من قسم **⭐ Ratings**.")], components: rows };
 }
 
 // ─────────── قسم التذاكر (مطابق لصورة لوحة تحكم NSR) ───────────
@@ -327,6 +331,37 @@ function ticketStatsSection() {
       new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary),
     )],
   };
+}
+
+// ─────────── قسم الرتب التلقائية ───────────
+// نفس مبدأ قسم الرومات: نعرض الرتبة المحفوظة كقيمة مختارة، ونعيد رسم القسم بعد الحفظ.
+function autorolesSection(statusText) {
+  config.autoRoles ||= { enabled: false, memberRoleId: "", botRoleId: "" };
+  const a = config.autoRoles;
+  const memberSel = new RoleSelectMenuBuilder().setCustomId("autorole_select:member")
+    .setPlaceholder(a.memberRoleId ? `👤 رتبة الأعضاء — الحالية: <@&${a.memberRoleId}>` : "👤 رتبة الأعضاء — غير محددة")
+    .setMinValues(0).setMaxValues(1);
+  if (a.memberRoleId) memberSel.setDefaultRoles([a.memberRoleId]);
+  const botSel = new RoleSelectMenuBuilder().setCustomId("autorole_select:bot")
+    .setPlaceholder(a.botRoleId ? `🤖 رتبة البوتات — الحالية: <@&${a.botRoleId}>` : "🤖 رتبة البوتات — غير محددة")
+    .setMinValues(0).setMaxValues(1);
+  if (a.botRoleId) botSel.setDefaultRoles([a.botRoleId]);
+  const rows = [
+    new ActionRowBuilder().addComponents(memberSel),
+    new ActionRowBuilder().addComponents(botSel),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("panel:autoroles-toggle").setLabel(`${a.enabled ? "✅" : "❌"} ${a.enabled ? "إيقاف الرتب التلقائية" : "تفعيل الرتب التلقائية"}`).setStyle(a.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+  return { embeds: [embed("🏷️ الرتب التلقائية", [
+    `**الحالة:** ${a.enabled ? "✅ مفعّل" : "❌ معطّل"}`,
+    `**رتبة الأعضاء:** ${a.memberRoleId ? `<@&${a.memberRoleId}>` : "غير محددة"}`,
+    `**رتبة البوتات:** ${a.botRoleId ? `<@&${a.botRoleId}>` : "غير محددة"}`,
+    "",
+    "اختر الرتب من القوائم بالأسفل — تُحفظ فوراً.",
+    "البوت يحتاج صلاحية **إدارة الرتب**، ورتبته تكون فوق الرتب المختارة.",
+  ].join("\n") + (statusText ? `\n\n${statusText}` : ""))], components: rows };
 }
 
 function productEmbed(product) {
@@ -653,6 +688,36 @@ client.on(Events.InteractionCreate, async interaction => {
         const desc = productStats.length ? productStats.map(p => `**${p.name}** — ${p.count} purchase(s) • ${(p.avg || 0).toFixed(1)}/5`).join("\n") : "No products yet.";
         return interaction.reply({ embeds: [embed("Product Analytics", desc)], ephemeral: true });
       }
+      // ─────────── قفل/فتح الروم الحالي ───────────
+      // /close يمنع الإرسال والثريدات على @everyone
+      // /open يرجعها للوضع الطبيعي (null = لا مسموح ولا ممنوع) — مو يحطها مسموحة
+      if (commandName === "close" || commandName === "open") {
+        if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+        const isClose = commandName === "close";
+        const value = isClose ? false : null;
+        const channel = interaction.channel;
+        if (!channel?.permissionOverwrites) {
+          return interaction.reply({ content: "❌ هذا الروم ما يدعم تغيير الصلاحيات.", ephemeral: true });
+        }
+        try {
+          await channel.permissionOverwrites.edit(interaction.guild.id, {
+            SendMessages: value,
+            SendMessagesInThreads: value,
+            CreatePublicThreads: value,
+            CreatePrivateThreads: value,
+          });
+        } catch (err) {
+          return interaction.reply({ content: `❌ تعذر ${isClose ? "قفل" : "فتح"} الروم: ${err.message}`, ephemeral: true });
+        }
+        const title = isClose ? "🔒 تم قفل الروم" : "🔓 تم فتح الروم";
+        const body = [
+          `**الروم:** <#${channel.id}>`,
+          isClose
+            ? "الرسائل والثريدات ممنوعة الآن للجميع."
+            : "رجعت الصلاحيات للوضع الطبيعي (لا مسموح ولا ممنوع).",
+        ].join("\n");
+        return interaction.reply({ embeds: [embed(title, body)] });
+      }
       if (commandName === "welcome-set") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
         const message = interaction.options.getString("message", true);
@@ -669,11 +734,14 @@ client.on(Events.InteractionCreate, async interaction => {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       config.autoRoles ||= { enabled: false, memberRoleId: "", botRoleId: "" };
       const target = interaction.customId.split(":")[1];
-      const roleId = interaction.values[0];
+      // القيم الفارغة (اختيار صفر رتبة) = مسح الرتبة المحفوظة
+      const roleId = interaction.values[0] || "";
       if (target === "member") config.autoRoles.memberRoleId = roleId;
       else if (target === "bot") config.autoRoles.botRoleId = roleId;
-      fs.writeFileSync(path.join(__dirname, "..", "config.json"), JSON.stringify(config, null, 2));
-      return interaction.reply({ content: `Automatic ${target === "member" ? "member" : "bot"} role saved: <@&${roleId}>. Open /panel → Automatic Roles to enable it if needed.`, ephemeral: true });
+      saveConfig();
+      return interaction.update(autorolesSection(roleId
+        ? `✅ تم حفظ ${target === "member" ? "رتبة الأعضاء" : "رتبة البوتات"}: <@&${roleId}>.`
+        : `🗑️ تم مسح ${target === "member" ? "رتبة الأعضاء" : "رتبة البوتات"}.`));
     }
 
     if (interaction.isButton()) {
@@ -736,32 +804,12 @@ client.on(Events.InteractionCreate, async interaction => {
           modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("body").setLabel("Welcome text ({user}, {server})").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1500)),new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("image").setLabel("Direct image URL (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(300)));
           return interaction.showModal(modal);
         }
-        if (section === "autoroles") {
-          config.autoRoles ||= { enabled: false, memberRoleId: "", botRoleId: "" };
-          const enabledText = config.autoRoles.enabled ? "ENABLED" : "DISABLED";
-          const memberRole = config.autoRoles.memberRoleId ? `<@&${config.autoRoles.memberRoleId}>` : "Not set";
-          const botRole = config.autoRoles.botRoleId ? `<@&${config.autoRoles.botRoleId}>` : "Not set";
-          const rows = [
-            new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId("autorole_select:member").setPlaceholder("Choose automatic role for members").setMinValues(1).setMaxValues(1)),
-            new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId("autorole_select:bot").setPlaceholder("Choose automatic role for bots").setMinValues(1).setMaxValues(1)),
-            new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setCustomId("panel:autoroles-toggle").setLabel(config.autoRoles.enabled ? "Disable Auto Roles" : "Enable Auto Roles").setStyle(config.autoRoles.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-              new ButtonBuilder().setCustomId("panel:home").setLabel("Back to Main Panel").setStyle(ButtonStyle.Secondary)
-            )
-          ];
-          return interaction.update({ embeds: [embed("Automatic Role Settings", `Status: **${enabledText}**\nMember role: ${memberRole}\nBot role: ${botRole}\n\nChoose roles using the menus, then enable automatic roles. Existing members are not changed; this applies when someone joins. The bot must have Manage Roles and its highest role must be above the roles you select.`)], components: rows });
-        }
+        if (section === "autoroles") return interaction.update(autorolesSection());
         if (section === "autoroles-toggle") {
           config.autoRoles ||= { enabled: false, memberRoleId: "", botRoleId: "" };
           config.autoRoles.enabled = !config.autoRoles.enabled;
-          fs.writeFileSync(path.join(__dirname, "..", "config.json"), JSON.stringify(config, null, 2));
-          const enabledText = config.autoRoles.enabled ? "ENABLED" : "DISABLED";
-          const rows = [
-            new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId("autorole_select:member").setPlaceholder("Choose automatic role for members").setMinValues(1).setMaxValues(1)),
-            new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId("autorole_select:bot").setPlaceholder("Choose automatic role for bots").setMinValues(1).setMaxValues(1)),
-            new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:autoroles-toggle").setLabel(config.autoRoles.enabled ? "Disable Auto Roles" : "Enable Auto Roles").setStyle(config.autoRoles.enabled ? ButtonStyle.Danger : ButtonStyle.Success),new ButtonBuilder().setCustomId("panel:home").setLabel("Back to Main Panel").setStyle(ButtonStyle.Secondary))
-          ];
-          return interaction.update({ embeds: [embed("Automatic Role Settings", `Automatic roles are now **${enabledText}**.\nMember role: ${config.autoRoles.memberRoleId ? `<@&${config.autoRoles.memberRoleId}>` : "Not set"}\nBot role: ${config.autoRoles.botRoleId ? `<@&${config.autoRoles.botRoleId}>` : "Not set"}`)], components: rows });
+          saveConfig();
+          return interaction.update(autorolesSection(config.autoRoles.enabled ? "✅ تم تفعيل الرتب التلقائية — تُعطى عند دخول عضو جديد." : "❌ تم إيقاف الرتب التلقائية."));
         }
         if (section === "home") return interaction.update(mainPanel());
         if (section === "refresh") {
@@ -847,15 +895,18 @@ client.on(Events.InteractionCreate, async interaction => {
     // ─────────── اختيار رومات التنبيهات والنشر ───────────
     if (interaction.isChannelSelectMenu() && (interaction.customId.startsWith("d7_ch_") || interaction.customId === "d7_order_ch" || interaction.customId === "d7_ratings_ch")) {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-      const map = { "d7_ch_orders": "orders", "d7_ch_sales": "salesLogs", "d7_showcase_channel": "productShowcase", "d7_ch_showcase": "productShowcase", "d7_ch_reviews": "reviews", "d7_order_ch": "orders", "d7_ratings_ch": "reviews" };
+      // ملاحظة: "d7_ch_reviews" محفوظ للتوافق مع لوحات منشورة سابقاً —
+      // القائمة نفسها شلتناها من قسم الرومات (صارت في قسم التقييمات فقط).
+      const map = { "d7_ch_orders": "orders", "d7_ch_sales": "salesLogs", "d7_ch_showcase": "productShowcase", "d7_ch_reviews": "reviews", "d7_order_ch": "orders", "d7_ratings_ch": "reviews" };
       const key = map[interaction.customId];
       if (!key) return;
       config.channels ||= {};
       config.channels[key] = interaction.values[0];
       saveConfig();
+      // نعيد رسم نفس القسم بدل رد مؤقت — عشان يظهر الاختيار محفوظ فوراً
       if (interaction.customId === "d7_order_ch") return interaction.update(ordersSection());
       if (interaction.customId === "d7_ratings_ch") return interaction.update(ratingsSection());
-      return interaction.reply({ content: `✅ تم تحديد <#${interaction.values[0]}>.`, ephemeral: true });
+      return interaction.update(channelsSection());
     }
 
     // ─────────── لوحة التذاكر: فتح تذكرة ───────────

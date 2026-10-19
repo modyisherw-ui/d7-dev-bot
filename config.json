@@ -31,7 +31,29 @@
       "title": "🎫 D7 Dev Support",
       "description": "اختر نوع التذكرة من القائمة بالأسفل."
     },
-    "ticketTypes": []
+    "ticketTypes": [
+      {
+        "id": "support",
+        "label": "Support",
+        "description": "استفسار أو طلب مساعدة",
+        "emoji": "🎫",
+        "enabled": true
+      },
+      {
+        "id": "purchase",
+        "label": "Purchase",
+        "description": "استفسار عن طلبية أو منتج",
+        "emoji": "🛒",
+        "enabled": true
+      },
+      {
+        "id": "technical",
+        "label": "Technical",
+        "description": "مشكلة تقنية",
+        "emoji": "🛠️",
+        "enabled": true
+      }
+    ]
   },
   "purchase": {
     "manualConfirmation": true,

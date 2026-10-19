@@ -100,3 +100,105 @@ Error: Used disallowed intents
     at TCP.done (node:internal/tls/wrap:748:7)
 
 Node.js v22.23.3
+/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:1151
+          error: new Error("Used disallowed intents")
+                 ^
+
+Error: Used disallowed intents
+    at WebSocketShard.onClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:1151:18)
+    at connection.onclose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:688:17)
+    at callListener (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/event-target.js:290:14)
+    at WebSocket.onClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/event-target.js:220:9)
+    at WebSocket.emit (node:events:519:28)
+    at WebSocket.emitClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/websocket.js:292:10)
+    at TLSSocket.socketOnClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/websocket.js:1374:15)
+    at TLSSocket.emit (node:events:531:35)
+    at node:net:347:12
+    at TCP.done (node:internal/tls/wrap:748:7)
+
+Node.js v22.23.3
+/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:1151
+          error: new Error("Used disallowed intents")
+                 ^
+
+Error: Used disallowed intents
+    at WebSocketShard.onClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:1151:18)
+    at connection.onclose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:688:17)
+    at callListener (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/event-target.js:290:14)
+    at WebSocket.onClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/event-target.js:220:9)
+    at WebSocket.emit (node:events:519:28)
+    at WebSocket.emitClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/websocket.js:292:10)
+    at TLSSocket.socketOnClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/websocket.js:1374:15)
+    at TLSSocket.emit (node:events:531:35)
+    at node:net:347:12
+    at TCP.done (node:internal/tls/wrap:748:7)
+
+Node.js v22.23.3
+/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:1151
+          error: new Error("Used disallowed intents")
+                 ^
+
+Error: Used disallowed intents
+    at WebSocketShard.onClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:1151:18)
+    at connection.onclose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:688:17)
+    at callListener (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/event-target.js:290:14)
+    at WebSocket.onClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/event-target.js:220:9)
+    at WebSocket.emit (node:events:519:28)
+    at WebSocket.emitClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/websocket.js:292:10)
+    at TLSSocket.socketOnClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/websocket.js:1374:15)
+    at TLSSocket.emit (node:events:531:35)
+    at node:net:347:12
+    at TCP.done (node:internal/tls/wrap:748:7)
+
+Node.js v22.23.3
+/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:1151
+          error: new Error("Used disallowed intents")
+                 ^
+
+Error: Used disallowed intents
+    at WebSocketShard.onClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:1151:18)
+    at connection.onclose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:688:17)
+    at callListener (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/event-target.js:290:14)
+    at WebSocket.onClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/event-target.js:220:9)
+    at WebSocket.emit (node:events:519:28)
+    at WebSocket.emitClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/websocket.js:292:10)
+    at TLSSocket.socketOnClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/websocket.js:1374:15)
+    at TLSSocket.emit (node:events:531:35)
+    at node:net:347:12
+    at TCP.done (node:internal/tls/wrap:748:7)
+
+Node.js v22.23.3
+/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:1151
+          error: new Error("Used disallowed intents")
+                 ^
+
+Error: Used disallowed intents
+    at WebSocketShard.onClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:1151:18)
+    at connection.onclose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:688:17)
+    at callListener (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/event-target.js:290:14)
+    at WebSocket.onClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/event-target.js:220:9)
+    at WebSocket.emit (node:events:519:28)
+    at WebSocket.emitClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/websocket.js:292:10)
+    at TLSSocket.socketOnClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/websocket.js:1374:15)
+    at TLSSocket.emit (node:events:531:35)
+    at node:net:347:12
+    at TCP.done (node:internal/tls/wrap:748:7)
+
+Node.js v22.23.3
+/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:1151
+          error: new Error("Used disallowed intents")
+                 ^
+
+Error: Used disallowed intents
+    at WebSocketShard.onClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:1151:18)
+    at connection.onclose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/ws/dist/index.js:688:17)
+    at callListener (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/event-target.js:290:14)
+    at WebSocket.onClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/event-target.js:220:9)
+    at WebSocket.emit (node:events:519:28)
+    at WebSocket.emitClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/websocket.js:292:10)
+    at TLSSocket.socketOnClose (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/ws/lib/websocket.js:1374:15)
+    at TLSSocket.emit (node:events:531:35)
+    at node:net:347:12
+    at TCP.done (node:internal/tls/wrap:748:7)
+
+Node.js v22.23.3

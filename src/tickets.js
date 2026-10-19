@@ -32,9 +32,10 @@ function saveConfig() {
 }
 
 const DEFAULT_TYPES = [
-  { id: "support", label: "Support", description: "استفسار أو طلب مساعدة", emoji: "🎫", enabled: true },
-  { id: "purchase", label: "Purchase", description: "استفسار عن طلبية أو منتج", emoji: "🛒", enabled: true },
-  { id: "technical", label: "Technical", description: "مشكلة تقنية", emoji: "🛠️", enabled: true },
+  { id: "purchase", label: "Purchase", description: "Inquire about buying a product or service", emoji: "🛒", enabled: true },
+  { id: "inquiry", label: "Inquiry", description: "General question or inquiry", emoji: "💬", enabled: true },
+  { id: "problem", label: "Problem", description: "Report a bug or issue", emoji: "🚧", enabled: true },
+  { id: "report", label: "Report a User", description: "Report a user or issue", emoji: "🚨", enabled: false },
 ];
 
 function types() {
@@ -51,9 +52,9 @@ function panelRows() {
   const enabled = types().filter(t => t.enabled !== false);
   const select = new StringSelectMenuBuilder()
     .setCustomId("d7_ticket_type")
-    .setPlaceholder("اختر نوع التذكرة...")
+    .setPlaceholder("Select a ticket type...")
     .addOptions(enabled.map(t => {
-      const opt = new StringSelectMenuOptionBuilder().setLabel(t.label).setDescription(t.description || "تذكرة").setValue(t.id);
+      const opt = new StringSelectMenuOptionBuilder().setLabel(t.label).setDescription(t.description || "Ticket").setValue(t.id);
       if (t.emoji && /^\p{Extended_Pictographic}$/u.test(t.emoji.trim())) opt.setEmoji(t.emoji.trim());
       return opt;
     }));
@@ -61,13 +62,15 @@ function panelRows() {
 }
 
 function panelEmbed() {
-  const p = ensureConfig().panel;
+  const t = ensureConfig();
+  const p = t.panel || {};
+  const enabled = types().filter(x => x.enabled !== false);
+  const lines = enabled.map(tp => `> ${tp.emoji || ""} **${tp.label}** — ${tp.description}`).join("\n");
   return new EmbedBuilder()
     .setColor(TICKET_COLOR)
-    .setTitle(p.title || "🎫 D7 Dev Support")
-    .setDescription(p.description || "اختر نوع التذكرة من القائمة بالأسفل.")
-    .setFooter({ text: config.brand?.footer || "D7 Dev" })
-    .setTimestamp();
+    .setTitle(p.title || "🎫 Support Tickets")
+    .setDescription(`${p.description || ""}\n\n${lines}`)
+    .setFooter({ text: p.footer || config.brand?.footer || "D7 Dev" });
 }
 
 // ─────────── أدوات ───────────
@@ -108,14 +111,16 @@ async function handleSelect(interaction) {
   const typeId = interaction.values[0];
   const t = ensureConfig();
   const type = types().find(x => x.id === typeId);
-  if (!type) return interaction.reply({ content: "❌ نوع التذكرة غير موجود.", ephemeral: true });
+  if (!type || type.enabled === false) {
+    return interaction.reply({ content: "❌ هذا النوع معطّل حالياً من إعدادات التذاكر. انتظر إعادة إرسال اللوحة.", ephemeral: true });
+  }
 
   // إعادة ضبط القائمة في اللوحة (حتى لو فشل الفتح)
   try { await interaction.message.edit({ components: panelRows() }); } catch {}
 
   const existing = db.tickets.getUserOpen(interaction.user.id, interaction.guild.id);
   if (existing.length) {
-    return interaction.reply({ content: `⚠️ لديك تذكرة مفتوحة بالفعل: <#${existing[0].channel_id}>\nأغلقها أولاً.`, ephemeral: true });
+    return interaction.reply({ content: `⚠️ لديك تذكرة مفتوحة بالفعل: <#${existing[0].channel_id}>\nأغلقها أولاً قبل فتح تذكرة جديدة.`, ephemeral: true });
   }
 
   try {
@@ -135,15 +140,15 @@ async function handleSelect(interaction) {
     db.tickets.create({ channelId: channel.id, guildId: interaction.guild.id, userId: interaction.user.id, type: typeId, number });
 
     const controlEmbed = new EmbedBuilder()
-      .setColor(TICKET_COLOR)
+      .setColor(type.color || TICKET_COLOR)
       .setTitle(`${type.emoji || "🎫"} ${type.label} #${number}`)
-      .setDescription(`أهلاً <@${interaction.user.id}>!\nاكتب مشكلتك وفريق الدعم يساعدك بأقرب وقت.`)
+      .setDescription(`Welcome <@${interaction.user.id}>!\nPlease describe your issue and our staff will assist you shortly.`)
       .setFooter({ text: config.brand?.footer || "D7 Dev" })
       .setTimestamp();
     const controlRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("d7_tk_claim").setLabel("📥 استلام").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("d7_tk_summon").setLabel("📣 استدعاء").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("d7_tk_close").setLabel("🔒 إغلاق").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("d7_tk_claim").setLabel("📥 Claim").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("d7_tk_summon").setLabel("📣 Summon").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("d7_tk_close").setLabel("🔒 Close Ticket").setStyle(ButtonStyle.Danger),
     );
     await channel.send({ content: `<@${interaction.user.id}>`, embeds: [controlEmbed], components: [controlRow] });
     await sendLog(interaction.guild, embed("🎫 تذكرة جديدة", `**#${number}** • ${type.label}\nالعميل: <@${interaction.user.id}>\nالروم: ${channel}`));
@@ -171,11 +176,11 @@ async function handleClaim(interaction) {
   const user = await interaction.client.users.fetch(ticket.user_id).catch(() => null);
   if (user) {
     await user.send({
-      embeds: [embed("📥 تم استلام تذكرتك", `تذكرتك **#${ticket.number}** استلمها فريق الدعم.\n<@${interaction.user.id}>`)],
+      embeds: [embed("📥 Your ticket has been claimed!", `Your ticket **#${ticket.number}** has been claimed by the support team.\nتم استلام تذكرتك **رقم ${ticket.number}** من قبل فريق الدعم.\n\n<@${interaction.user.id}>`)],
     }).catch(() => {});
   }
   await interaction.channel.send({ content: `📥 تم استلام التذكرة بواسطة <@${interaction.user.id}>` }).catch(() => {});
-  await interaction.reply({ content: "✅ تم استلام التذكرة.", ephemeral: true });
+  await interaction.reply({ content: "✅ تم استلام التذكرة! أُرسل إشعار لصاحبها.", ephemeral: true });
   await sendLog(interaction.guild, embed("📥 تذكرة مستلمة", `**#${ticket.number}**\nالعميل: <@${ticket.user_id}>\nال.staff: ${interaction.user}`));
 }
 
@@ -183,14 +188,14 @@ async function handleClaim(interaction) {
 async function handleSummon(interaction) {
   const ticket = db.tickets.get(interaction.channel.id);
   if (!ticket || ticket.status === "closed") return interaction.reply({ content: "❌ هذه ليست تذكرة نشطة.", ephemeral: true });
-  if (!canManage(interaction.member, interaction.guild.id)) return interaction.reply({ content: "❌ فقط فريق الدعم يمكنه الاستدعاء.", ephemeral: true });
+  if (!canManage(interaction.member, interaction.guild.id)) return interaction.reply({ content: "❌ فقط فريق الدعم يمكنه استدعاء صاحب التذكرة.", ephemeral: true });
   const user = await interaction.client.users.fetch(ticket.user_id).catch(() => null);
   if (user) {
     const link = `https://discord.com/channels/${interaction.guild.id}/${interaction.channel.id}`;
-    await user.send({ embeds: [embed("📣 الرد على تذكرتك", `الرجاء الرد على تذكرتك **#${ticket.number}**.\n${link}`)] }).catch(() => {});
+    await user.send({ embeds: [embed("📣 Please reply to your ticket!", `Please reply to your ticket **#${ticket.number}**.\nالرجاء الرد على تذكرتك **رقم ${ticket.number}**.\n\n${link}`)] }).catch(() => {});
   }
   await interaction.channel.send({ content: `📣 تم استدعاء صاحب التذكرة بواسطة <@${interaction.user.id}>` }).catch(() => {});
-  await interaction.reply({ content: "✅ تم استدعاء صاحب التذكرة.", ephemeral: true });
+  await interaction.reply({ content: "✅ تم استدعاء صاحب التذكرة (إشعار على الخاص).", ephemeral: true });
 }
 
 // ─────────── الإغلاق ───────────
@@ -215,7 +220,11 @@ async function handleClose(interaction) {
   const ch = logChannel(guild);
   if (ch?.isTextBased()) {
     await ch.send({
-      embeds: [embed("🔒 تذكرة مغلقة", `**#${ticket.number}**\nالعميل: <@${ticket.user_id}>\nأغلقها: ${interaction.user}`)],
+      embeds: [new EmbedBuilder().setTitle("🔒 Ticket Closed").setColor("Red").addFields(
+        { name: "المستخدم", value: `<@${ticket.user_id}>` },
+        { name: "أغلقها", value: `<@${interaction.user.id}>` },
+        { name: "النوع", value: ticket.type }
+      ).setTimestamp()],
       files: [file],
     }).catch(() => {});
   }
@@ -223,8 +232,11 @@ async function handleClose(interaction) {
   const user = await interaction.client.users.fetch(ticket.user_id).catch(() => null);
   if (user) {
     await user.send({
-      embeds: [embed("🔒 تم إغلاق تذكرتك", `تذكرتك **#${ticket.number}** أُغلقت. إذا تحتاج مساعدة ثانية افتح تذكرة جديدة.`)],
-      files: [new AttachmentBuilder(Buffer.from(transcript || "No messages captured.", "utf8"), { name: fileName })],
+      embeds: [new EmbedBuilder().setColor("Red").setTitle("🔒 Your ticket has been closed")
+        .setDescription(`Your ticket **#${ticket.number}** has been closed. If you need more help, feel free to open a new ticket!\nتم قفل تذكرتك **رقم ${ticket.number}**، إذا كنت بحاجة لأي مساعدة يمكنك فتح تذكرة جديدة.`)
+        .setFooter({ text: config.brand?.footer || "D7 Dev" })
+        .setTimestamp()],
+      files: [file],
     }).catch(() => {});
   }
 

@@ -5,9 +5,12 @@ const commands = [
   new SlashCommandBuilder().setName("panel").setDescription("Open the unified D7 Dev control panel"),
   new SlashCommandBuilder().setName("ticket-panel").setDescription("Post the D7 Dev ticket panel"),
   new SlashCommandBuilder().setName("products").setDescription("List products"),
-  new SlashCommandBuilder().setName("product-add").setDescription("Add a store product")
-    .addStringOption(o=>o.setName("name").setDescription("Product name").setRequired(true))
-    .addNumberOption(o=>o.setName("price").setDescription("Price in SAR").setRequired(true).setMinValue(0)),
+  new SlashCommandBuilder().setName("product-add").setDescription("Add a store product (role → price → name)")
+    .addStringOption(o=>o.setName("name").setDescription("Product name (skip the name step)").setRequired(false))
+    .addNumberOption(o=>o.setName("price").setDescription("Price in SAR (skip the price step)").setRequired(false).setMinValue(0)),
+  new SlashCommandBuilder().setName("rate").setDescription("إرسال رسالة تقييم منتج لعميل على الخاص")
+    .addUserOption(o=>o.setName("user").setDescription("العميل الذي سيُقيّم").setRequired(true))
+    .addStringOption(o=>o.setName("product").setDescription("اسم المنتج (اكتب أو اختر من القائمة)").setRequired(true).setAutocomplete(true)),
   new SlashCommandBuilder().setName("product-edit").setDescription("Change product availability")
     .addIntegerOption(o=>o.setName("id").setDescription("Product ID").setRequired(true).setMinValue(1))
     .addStringOption(o=>o.setName("status").setDescription("New status").setRequired(true)

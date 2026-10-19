@@ -81,6 +81,15 @@ CREATE TABLE IF NOT EXISTS product_reviews (
   FOREIGN KEY(order_id) REFERENCES orders(id),
   FOREIGN KEY(product_id) REFERENCES products(id)
 );
+CREATE TABLE IF NOT EXISTS ratings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL DEFAULT '',
+  product_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  stars INTEGER NOT NULL,
+  comment TEXT DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -112,6 +121,15 @@ db.tickets = {
   },
   saveRating: (ticketId, userId, rating, feedback) =>
     db.prepare(`INSERT OR REPLACE INTO ticket_ratings (ticket_id, user_id, rating, feedback) VALUES (?,?,?,?)`).run(ticketId, userId, rating, feedback),
+};
+
+// ═══════════════ Ratings (NSR-style product ratings) ═══════════════
+db.ratings = {
+  add: ({ guildId, productId, userId, stars, comment }) =>
+    db.prepare(`INSERT INTO ratings (guild_id, product_id, user_id, stars, comment) VALUES (?,?,?,?,?)`)
+      .run(guildId || "", String(productId), userId, stars, comment || ""),
+  byProduct: (productId) =>
+    db.prepare(`SELECT COUNT(*) n, COALESCE(AVG(stars),0) avg FROM ratings WHERE product_id=?`).get(String(productId)),
 };
 
 module.exports = db;

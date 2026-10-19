@@ -25,8 +25,10 @@
   },
   "tickets": {
     "categoryId": "",
-    "logChannelId": "",
-    "staffRoles": [],
+    "logChannelId": "1561450187220586596",
+    "staffRoles": [
+      "1561454000627523684"
+    ],
     "panel": {
       "title": "🎫 D7 Dev Support",
       "description": "اختر نوع التذكرة من القائمة بالأسفل."

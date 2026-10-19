@@ -1,3 +1,5 @@
 D7 Dev bot online as D7 Dev#6918
 (node:2187) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
 (Use `node --trace-warnings ...` to show where the warning was created)
+Migrating tickets table to the numbered ticket schema…
+D7 Dev bot online as D7 Dev#6918

@@ -9,8 +9,8 @@
     "news": "",
     "rules": "",
     "updates": "",
-    "productShowcase": "",
-    "reviews": "",
+    "productShowcase": "1561447203959078912",
+    "reviews": "1561446997217775748",
     "orders": "",
     "adminDashboard": "",
     "salesLogs": ""
@@ -35,10 +35,34 @@
       "footer": "D7 Dev • Store System"
     },
     "ticketTypes": [
-      { "id": "purchase", "label": "Purchase", "description": "Inquire about buying a product or service", "emoji": "🛒", "enabled": true },
-      { "id": "inquiry", "label": "Inquiry", "description": "General question or inquiry", "emoji": "💬", "enabled": true },
-      { "id": "problem", "label": "Problem", "description": "Report a bug or issue", "emoji": "🚧", "enabled": true },
-      { "id": "report", "label": "Report a User", "description": "Report a user or issue", "emoji": "🚨", "enabled": false }
+      {
+        "id": "purchase",
+        "label": "Purchase",
+        "description": "Inquire about buying a product or service",
+        "emoji": "🛒",
+        "enabled": true
+      },
+      {
+        "id": "inquiry",
+        "label": "Inquiry",
+        "description": "General question or inquiry",
+        "emoji": "💬",
+        "enabled": true
+      },
+      {
+        "id": "problem",
+        "label": "Problem",
+        "description": "Report a bug or issue",
+        "emoji": "🚧",
+        "enabled": true
+      },
+      {
+        "id": "report",
+        "label": "Report a User",
+        "description": "Report a user or issue",
+        "emoji": "🚨",
+        "enabled": false
+      }
     ]
   },
   "purchase": {

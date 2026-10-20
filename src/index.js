@@ -339,12 +339,14 @@ function ordersSection() {
         .setValue(String(o.id))))));
   }
   // ⬇️ سجل الطلبات: كل طلب وكل تغيير حالة ينزل برسالته الخاصة
-  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_ch", "orders", `📋 روم سجل الطلبات — الحالي: ${chLabel("orders")}`)));
+  // ملاحظة: الـ placeholder يظهر فقط لما ما يكون فيه روم محفوظ —
+  // ولو كان محفوظاً يظهر اسمه داخل القائمة مكانها، عشان كذا نذكره في نص الرسالة.
+  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_ch", "orders", "📋 اختر روم سجل الطلبات")));
   rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("panel:orders").setLabel("🔄 تحديث").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary)
   ));
-  return { embeds: [embed("🧾 الطلبات", `${desc}\n\nأكّد الدفع من القائمة بالأعلى، والعميل ياخذ رتبة المنتج تلقائياً.\n**📋 روم سجل الطلبات:** كل تأكيد أو تسليم أو إلغاء ينزل فيه رسالة جديدة باسم المنتج ورتبته وسعره وحالته ومشتريه وتقييمه — كل طلب برسالته، مو لستة مجمّعة.`)], components: rows.slice(0, 5) };
+  return { embeds: [embed("🧾 الطلبات", `${desc}\n\nأكّد الدفع من القائمة بالأعلى، والعميل ياخذ رتبة المنتج تلقائياً.\n**📋 الروم أسفل الرسالة هو سجل الطلبات** — كل تأكيد أو تسليم أو إلغاء ينزل فيه رسالة جديدة بحالة الطلب.`)], components: rows.slice(0, 5) };
 }
 
 // ─────────── قسم التقييمات (نسخة من NSR Hub) ───────────

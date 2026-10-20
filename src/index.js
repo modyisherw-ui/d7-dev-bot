@@ -8,7 +8,7 @@ const {
   ChannelSelectMenuBuilder, ChannelType, PermissionFlagsBits, EmbedBuilder
 } = require("discord.js");
 const db = require("./db");
-const { embed, hasStaff, formatPrice, safeChannelId, cleanFileName, EMBED_COLOR } = require("./utils");
+const { embed, hasStaff, formatPrice, safeChannelId, cleanFileName, EMBED_COLOR, EMBED_THUMB } = require("./utils");
 const tickets = require("./tickets");
 const ratings = require("./ratings");
 const config = require("../config.json");
@@ -184,6 +184,7 @@ function welcomePayload() {
     .join("\n");
   const e = new EmbedBuilder()
     .setColor(EMBED_COLOR)
+    .setThumbnail(EMBED_THUMB)
     .setTitle(w.title || "Welcome!")
     .setDescription(body || " ")
     .setFooter({ text: w.footer || config.brand?.footer || "D7 Dev" });
@@ -245,6 +246,7 @@ function ticketsSection() {
 
   const e = new EmbedBuilder()
     .setColor(EMBED_COLOR)
+    .setThumbnail(EMBED_THUMB)
     .setTitle("🎫 نظام التذاكر")
     .setDescription([
       `**عنوان اللوحة:** ${t.panel?.title || "🎫 Support Tickets"}`,

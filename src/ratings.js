@@ -8,7 +8,7 @@ const {
 const fs = require("node:fs");
 const path = require("node:path");
 const db = require("./db");
-const { EMBED_COLOR } = require("./utils");
+const { EMBED_COLOR, EMBED_THUMB } = require("./utils");
 const config = require("../config.json");
 
 const CONFIG_FILE = path.join(__dirname, "..", "config.json");
@@ -50,10 +50,9 @@ function getByRole(roleId) {
 async function sendPurchaseDM(target, product, client, guild) {
   try {
     const dm = await target.createDM();
-    const icon = guild?.iconURL({ size: 256 }) || client.user.displayAvatarURL();
     const e = new EmbedBuilder()
       .setColor(EMBED_COLOR)
-      .setThumbnail(icon)
+      .setThumbnail(EMBED_THUMB)
       .setTitle("Thank you for purchase")
       .setDescription(`\n**Products**\n**${product.name}**\n\nشكراً لثقتك بنا 💙\nنتمنى أن تكون تجربتك معنا رائعة.\nقيّم تجربتك بالأسفل ⭐`);
     const starRow = new ActionRowBuilder().addComponents(
@@ -91,6 +90,7 @@ async function handleLangButton(interaction) {
     : ["**Products**", `**${product.name}**`, "", "We hope you had a great experience with us.", "Please rate your experience below ⭐"].join("\n");
   const e = new EmbedBuilder()
     .setColor(EMBED_COLOR)
+    .setThumbnail(EMBED_THUMB)
     .setTitle(ar ? "Thank you for purchase" : "Rate your experience")
     .setDescription("\n" + desc);
   const starRow = new ActionRowBuilder().addComponents(
@@ -155,6 +155,7 @@ async function handleCommentModal(interaction) {
       const role = product?.roleId ? guild.roles.cache.get(product.roleId) : null;
       const e = new EmbedBuilder()
         .setColor(EMBED_COLOR)
+        .setThumbnail(EMBED_THUMB)
         .setAuthor({ name: "Feedback", iconURL: guild.iconURL({ size: 128 }) || client.user.displayAvatarURL() })
         .setDescription("We are delighted by a customer's evaluation of our services and the positive impression it left.")
         .addFields(

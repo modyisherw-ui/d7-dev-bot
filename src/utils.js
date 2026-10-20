@@ -3,10 +3,13 @@ const config = require("../config.json");
 
 // لون واحد لكل إيمبد في البوت
 const EMBED_COLOR = 0x2fa2fa;
+// شعار ثابت أعلى يمين كل إيمبد (مسار داخل المستودع العام)
+const EMBED_THUMB = "https://raw.githubusercontent.com/modyisherw-ui/d7-dev-bot/main/assets/s2a-logo.png";
 
 function embed(title, description = "") {
   return new EmbedBuilder()
     .setColor(EMBED_COLOR)
+    .setThumbnail(EMBED_THUMB)
     .setTitle(title)
     .setDescription(description)
     .setFooter({ text: config.brand.footer || "D7 Dev" })
@@ -33,4 +36,4 @@ function cleanFileName(value) {
   return String(value || "transcript").replace(/[^a-z0-9-_]/gi, "_").slice(0, 80);
 }
 
-module.exports = { embed, hasStaff, formatPrice, safeChannelId, cleanFileName, EMBED_COLOR };
+module.exports = { embed, hasStaff, formatPrice, safeChannelId, cleanFileName, EMBED_COLOR, EMBED_THUMB };

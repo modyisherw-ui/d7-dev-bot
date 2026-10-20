@@ -82,7 +82,7 @@ function mainPanel() {
 }
 
 // ─────────── قسم المنتجات ───────────
-function productsSection() {
+function productsSection(message) {
   const products = db.prepare("SELECT * FROM products ORDER BY id DESC LIMIT 10").all();
   const list = products.length ? products.map(p => `**#${p.id} — ${p.name}** · ${formatPrice(p.price,p.currency)} · ${p.status}`).join("\n") : "No products yet.";
   return {
@@ -90,9 +90,23 @@ function productsSection() {
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("panel:add-product").setLabel("Add Product").setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId("panel:publish-products").setLabel("Publish Showcase").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("panel:products-list").setLabel("Refresh List").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId("panel:products-list").setLabel("Refresh List").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel:delete-product").setLabel("🗑️ حذف منتج").setStyle(ButtonStyle.Danger)
     )],
+    content: message || undefined,
   };
+}
+
+// قائمة اختيار المنتج المراد حذفه (تظهر بعد ضغط زر الحذف)
+function productDeleteRows() {
+  const products = db.prepare("SELECT * FROM products ORDER BY id DESC LIMIT 25").all();
+  if (!products.length) return null;
+  return [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+    .setCustomId("d7_prod_del_sel").setPlaceholder("اختر المنتج الذي تريد حذفه نهائياً...").setMinValues(1).setMaxValues(1)
+    .addOptions(products.map(p => new StringSelectMenuOptionBuilder()
+      .setLabel(`#${p.id} — ${p.name}`.slice(0, 100))
+      .setDescription(`${formatPrice(p.price, p.currency)} — حذف نهائي`.slice(0, 100))
+      .setValue(String(p.id)))))];
 }
 
 // ردّ على رسالة اللوحة نفسها متى أمكن (حتى لا تبقى الشاشة القديمة عالقة)
@@ -251,6 +265,7 @@ function ratingsSection() {
       }).join("\n")
     : "No products yet.";
   const rows = [
+    new ActionRowBuilder().addComponents(channelRow("d7_pcheck_ch", "purchaseChecks", `🛒 روم تأكيد الشراء — الحالي: ${chLabel("purchaseChecks")}`)),
     new ActionRowBuilder().addComponents(channelRow("d7_ratings_ch", "reviews", `⭐ روم التقييمات — الحالي: ${chLabel("reviews")}`)),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("d7_rate_send").setLabel("⭐ إرسال تقييم لعميل").setStyle(ButtonStyle.Success),
@@ -258,7 +273,14 @@ function ratingsSection() {
       new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary),
     ),
   ];
-  return { embeds: [embed("⭐ نظام التقييمات", `${list}\n\nالرسالة تظهر للعميل على الخاص: **Thank you for purchase** مع نجوم 1-5، والتقييم يُنشر في روم التقييمات.`)], components: rows };
+  return { embeds: [embed("⭐ نظام التقييمات", [
+    `${list}`,
+    "",
+    `**روم تأكيد الشراء:** ${safeChannelId(config.channels?.purchaseChecks) ? `<#${config.channels.purchaseChecks}>` : "غير محدد — تُرسل رسالة التقييم مباشرة بدون تأكيد."}`,
+    "أي عضو ياخذ رتبة منتج يجيه طلب تأكيد في الروم المحدد: تأكيد يرسل التقييم، ورفض ما يوصله شي.",
+    "",
+    `**روم التقييمات:** ${chLabel("reviews")} — التقييمات تُنشر فيه.`,
+  ].join("\n"))], components: rows };
 }
 
 // ─────────── قسم إعدادات المتجر ───────────
@@ -413,7 +435,11 @@ async function confirmOrder(interaction, id) {
   const guild = interaction.guild;
   const member = await guild.members.fetch(order.user_id).catch(() => null);
   if (!member) return interaction.reply({ content: "العميل مو عضو في هذا السيرفر.", ephemeral: true });
-  if (order.role_id) await member.roles.add(order.role_id, `D7 Dev order #${id} confirmed`).catch(() => {});
+  if (order.role_id) {
+    // تأكيد الدفع من الموظف نفسه → ما نطلب تأكيداً ثانياً قبل رسالة التقييم
+    preApprove(order.user_id, order.product_id);
+    await member.roles.add(order.role_id, `D7 Dev order #${id} confirmed`).catch(() => {});
+  }
   db.prepare("UPDATE orders SET status='confirmed',confirmed_at=CURRENT_TIMESTAMP,confirmed_by=? WHERE id=?").run(interaction.user.id, id);
   if (config.purchase.sendThankYouDM) {
     await member.send({ embeds: [embed("Thank you for your purchase!", `Your purchase of **${order.name}** has been confirmed.\nOrder: #${id}\nProduct role: ${order.role_id ? `<@&${order.role_id}>` : "No role configured"}`)] }).catch(() => {});
@@ -505,32 +531,97 @@ async function finishProduct(interaction) {
   return respondWith(interaction, { ...productsSection(), content: message });
 }
 
-// ─────────── رسالة التقييم التلقائية (نفس نظام NSR Hub) ───────────
-// أي عضو ياخذ رتبة أي منتج — سواء من تأكيد الطلب أو يدوياً من الموظفين —
-// توصله رسالة التقييم في الخاص. مع منع تكرار نفس الرسالة لنفس العضو والمنتج.
+// ─────────── تأكيد الشراء قبل إرسال رسالة التقييم ───────────
+// أي عضو ياخذ رتبة أي منتج → نطلب تأكيد من الموظفين في روم التأكيدات:
+//   ✅ تأكيد  → توصله رسالة التقييم
+//   ❌ رفض    → ما يوصله شي (كأنه ما جاتته الرتبة أصلاً)
+// إذا ما كان روم التأكيدات محدد، نرسل رسالة التقييم مباشرة حتى لا يتوقف النظام.
 const lastRatingDm = new Map();
 const RATING_DM_COOLDOWN = 60 * 60 * 1000; // ساعة
 
-async function maybeSendRatingDM(member, product) {
-  try {
-    if (!member?.user || member.user.bot) return;
-    if (config.purchase?.sendProductReviewDM === false) return;
-    if (!product) return;
-    const key = `${member.id}:${product.id}`;
-    const last = lastRatingDm.get(key) || 0;
-    if (Date.now() - last < RATING_DM_COOLDOWN) return;
+// طلب تأكيد يُنشأ تلقائياً من طرف الموظف نفسه (تأكيد الدفع من اللوحة)
+const preApproved = new Set();
+function preApprove(userId, productId) {
+  const key = `${userId}:${productId}`;
+  preApproved.add(key);
+  setTimeout(() => preApproved.delete(key), 15000);
+}
+
+function purchaseCheckChannel(guild) {
+  return channelFromConfig(guild, "purchaseChecks");
+}
+
+async function requestPurchaseCheck(member, product) {
+  if (!member?.user || member.user.bot) return;
+  if (config.purchase?.sendProductReviewDM === false) return;
+  if (!product) return;
+
+  const key = `${member.id}:${product.id}`;
+  const last = lastRatingDm.get(key) || 0;
+  if (Date.now() - last < RATING_DM_COOLDOWN) return;
+
+  // الموظف أكّد الدفع من اللوحة → ما نطلب تأكيد ثاني، نرسل التقييم مباشرة
+  if (preApproved.delete(key)) {
     lastRatingDm.set(key, Date.now());
     await ratings.sendPurchaseDM(member.user, product, client, member.guild);
-  } catch (err) {
-    console.error("Auto rating DM failed:", err.message);
+    return;
   }
+
+  const channel = purchaseCheckChannel(member.guild);
+  // ما فيه روم تأكيدات محدد → نرسل مباشرة (حتى لا يتوقف النظام)
+  if (!channel?.isTextBased()) {
+    lastRatingDm.set(key, Date.now());
+    await ratings.sendPurchaseDM(member.user, product, client, member.guild);
+    return;
+  }
+
+  // طلب قيد الانتظار لنفس العضو والمنتج → ما نكرر الرسالة
+  if (db.purchaseChecks.pendingFor(member.id, product.id)) return;
+
+  const check = db.purchaseChecks.create({
+    guildId: member.guild.id,
+    userId: member.id,
+    productId: product.id,
+    channelId: channel.id,
+  });
+  const payload = purchaseCheckPayload(check.lastInsertRowid, member.id, product, "pending");
+  const sent = await channel.send(payload).catch(err => {
+    console.error("Purchase check post failed:", err.message);
+    return null;
+  });
+  if (sent) db.purchaseChecks.linkMessage(check.lastInsertRowid, sent.id);
+}
+
+// حمولة رسالة التأكيد — تُستخدم عند الإنشاء وعند تحديث الحالة
+function purchaseCheckPayload(id, userId, product, status, decidedBy) {
+  const badge = status === "approved" ? "✅ **تم التأكيد** — أُرسلت رسالة التقييم."
+    : status === "rejected" ? "❌ **تم الرفض** — لم تُرسل أي رسالة."
+    : "⏳ **بانتظار التأكيد** — هل هذا العضو اشترى المنتج فعلاً؟";
+  const rows = status === "pending"
+    ? [new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`d7_pcheck:${id}:ok`).setLabel("✅ تأكيد").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`d7_pcheck:${id}:no`).setLabel("❌ رفض").setStyle(ButtonStyle.Danger),
+      )]
+    : [];
+  return {
+    embeds: [embed("🛒 تأكيد شراء منتج", [
+      `**العضو:** <@${userId}>`,
+      `**المنتج:** ${product?.name || "غير معروف"}${product?.name ? ` — ${formatPrice(product.price)}` : ""}`,
+      "",
+      badge,
+      decidedBy ? `**بواسطة:** <@${decidedBy}>` : "",
+    ].filter(Boolean).join("\n"))],
+    components: rows,
+  };
 }
 
 client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
   if (!newMember?.user) return;
   // الرتب المضافة فقط: اللي موجودة عند الجديد ومو موجودة عند القديم
   for (const role of newMember.roles.cache.values()) {
-    if (!oldMember?.roles?.cache?.has(role.id)) maybeSendRatingDM(newMember, ratings.getByRole(role.id));
+    if (!oldMember?.roles?.cache?.has(role.id)) {
+      requestPurchaseCheck(newMember, ratings.getByRole(role.id)).catch(err => console.error("Purchase check failed:", err.message));
+    }
   }
 });
 
@@ -760,6 +851,14 @@ client.on(Events.InteractionCreate, async interaction => {
           return interaction.reply({ content: "اختر الروم الذي تريد نشر المنتجات فيه:", components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId("d7_showcase_channel").setPlaceholder("اختر روم عرض المنتجات").addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1))] });
         }
         if (section === "products-list") return interaction.update(productsSection());
+        if (section === "delete-product") {
+          const rows = productDeleteRows();
+          if (!rows) return interaction.reply({ content: "لا توجد منتجات لحذفها.", ephemeral: true });
+          return interaction.update({
+            embeds: [embed("🗑️ حذف منتج", "**اختر المنتج من القائمة بالأسفل.**\n⚠️ الحذف نهائي ولا يمكن التراجع عنه.\nالمنتجات التي لديها طلبات مسجلة لا يمكن حذفها حفاظاً على سجل المبيعات.")],
+            components: rows,
+          });
+        }
         if (section === "orders") return interaction.update(ordersSection());
         if (section === "tickets") return interaction.update(ticketsSection());
         if (section === "channels") return interaction.update(channelsSection());
@@ -851,6 +950,37 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
 
+    // ─────────── تأكيد/رفض شراء منتج قبل رسالة التقييم ───────────
+    if (interaction.isButton() && interaction.customId.startsWith("d7_pcheck:")) {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const [, rawId, decision] = interaction.customId.split(":");
+      const check = db.purchaseChecks.get(Number(rawId));
+      if (!check) return interaction.reply({ content: "❌ هذا الطلب غير موجود.", ephemeral: true });
+      if (check.status !== "pending") return interaction.reply({ content: `هذا الطلب تم ${check.status === "approved" ? "تأكيده" : "رفضه"} بالفعل.`, ephemeral: true });
+      const approved = decision === "ok";
+      // نحدّد الحالة أولاً حتى لا يمراره اثنان في نفس اللحظة
+      const changed = db.purchaseChecks.decide(check.id, approved ? "approved" : "rejected", interaction.user.id);
+      if (!changed.changes) return interaction.reply({ content: "سبق وتم اتخاذ القرار لهذا الطلب.", ephemeral: true });
+      const product = ratings.getProducts().find(p => p.id === String(check.product_id)) || null;
+      let dmSent = false;
+      if (approved) {
+        const target = await interaction.client.users.fetch(check.user_id).catch(() => null);
+        if (target && !target.bot) dmSent = await ratings.sendPurchaseDM(target, product, interaction.client, interaction.guild);
+      }
+      // نحدّث الرسالة نفسها: نخفي الأزرار ونوضح النتيجة
+      if (check.message_id && interaction.channel?.messages) {
+        const msg = await interaction.channel.messages.fetch(check.message_id).catch(() => null);
+        if (msg) await msg.edit(purchaseCheckPayload(check.id, check.user_id, product, approved ? "approved" : "rejected", interaction.user.id)).catch(() => {});
+      }
+      const lines = [
+        approved
+          ? `✅ تم تأكيد شراء <@${check.user_id}> لمنتج **${product?.name || "غير معروف"}**.`
+          : `❌ تم رفض تأكيد شراء <@${check.user_id}> — لم تُرسل له أي رسالة.`,
+      ];
+      if (approved && !dmSent) lines.push("⚠️ تعذر إرسال رسالة التقييم للخاص — ربما قفلها العضو.");
+      return interaction.reply({ content: lines.join("\n"), ephemeral: true });
+    }
+
     // ─────────── اختيار رتبة المنتج ثم السعر ثم الاسم ───────────
     if (interaction.isRoleSelectMenu() && interaction.customId === "d7_prod_role") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -877,6 +1007,26 @@ client.on(Events.InteractionCreate, async interaction => {
       return interaction.showModal(productNameModal());
     }
 
+    // ─────────── حذف منتج نهائياً ───────────
+    if (interaction.isStringSelectMenu() && interaction.customId === "d7_prod_del_sel") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const id = Number(interaction.values[0]);
+      const product = db.prepare("SELECT * FROM products WHERE id=?").get(id);
+      if (!product) return interaction.reply({ content: "❌ المنتج غير موجود.", ephemeral: true });
+      // المنتجات التي لديها طلبات مسجلة ما نحذفها — حفاظاً على سجل المبيعات
+      // (وأصلاً: جدول الطلبات مرتبط بالمنتج بمفتاح خارجي)
+      const orderCount = db.prepare("SELECT COUNT(*) n FROM orders WHERE product_id=?").get(id).n;
+      if (orderCount) {
+        return interaction.reply({ content: `❌ لا يمكن حذف **${product.name}** — لديه ${orderCount} طلب مسجل.\nحذفه سيفقد سجل المبيعات. يمكنك إيقافه من تعديل المنتج بدلاً من ذلك.`, ephemeral: true });
+      }
+      // ننظف بيانات المنتج: التقييمات والمشاهدات
+      db.prepare("DELETE FROM ratings WHERE product_id=?").run(String(id));
+      db.prepare("DELETE FROM product_reviews WHERE product_id=?").run(id);
+      db.prepare("DELETE FROM purchase_checks WHERE product_id=?").run(String(id));
+      db.prepare("DELETE FROM products WHERE id=?").run(id);
+      return respondWith(interaction, { ...productsSection(), content: `🗑️ تم حذف المنتج **${product.name}** نهائياً.` });
+    }
+
     // ─────────── اختيار روم نشر المنتجات ───────────
     if (interaction.isChannelSelectMenu() && interaction.customId === "d7_showcase_channel") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -897,7 +1047,7 @@ client.on(Events.InteractionCreate, async interaction => {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       // ملاحظة: "d7_ch_reviews" محفوظ للتوافق مع لوحات منشورة سابقاً —
       // القائمة نفسها شلتناها من قسم الرومات (صارت في قسم التقييمات فقط).
-      const map = { "d7_ch_orders": "orders", "d7_ch_sales": "salesLogs", "d7_ch_showcase": "productShowcase", "d7_ch_reviews": "reviews", "d7_order_ch": "orders", "d7_ratings_ch": "reviews" };
+      const map = { "d7_ch_orders": "orders", "d7_ch_sales": "salesLogs", "d7_ch_showcase": "productShowcase", "d7_ch_reviews": "reviews", "d7_order_ch": "orders", "d7_ratings_ch": "reviews", "d7_pcheck_ch": "purchaseChecks" };
       const key = map[interaction.customId];
       if (!key) return;
       config.channels ||= {};

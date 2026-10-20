@@ -94,6 +94,18 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS purchase_checks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL DEFAULT '',
+  message_id TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  decided_by TEXT DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  decided_at TEXT DEFAULT NULL
+);
 `);
 
 // ═══════════════ Tickets (numbered, one channel per ticket) ═══════════════
@@ -130,6 +142,27 @@ db.ratings = {
       .run(guildId || "", String(productId), userId, stars, comment || ""),
   byProduct: (productId) =>
     db.prepare(`SELECT COUNT(*) n, COALESCE(AVG(stars),0) avg FROM ratings WHERE product_id=?`).get(String(productId)),
+};
+
+// ═══════════════ تأكيد الشراء اليدوي قبل إرسال التقييم ═══════════════
+// لما أحد ياخذ رتبة منتج نطلب تأكيد من الموظفين في روم محدد:
+// تأكيد ← تروح رسالة التقييم للعضو. رفض ← ما يوصله شي.
+db.purchaseChecks = {
+  create: ({ guildId, userId, productId, channelId }) =>
+    db.prepare(`INSERT INTO purchase_checks (guild_id, user_id, product_id, channel_id) VALUES (?,?,?,?)`)
+      .run(String(guildId), String(userId), String(productId), String(channelId || "")),
+  linkMessage: (id, messageId) =>
+    db.prepare(`UPDATE purchase_checks SET message_id=? WHERE id=?`).run(String(messageId || ""), id),
+  get: (id) => db.prepare(`SELECT * FROM purchase_checks WHERE id=?`).get(Number(id)) || null,
+  // طلب قيد الانتظار لنفس العضو والمنتج (حتى ما نكرر الرسالة)
+  pendingFor: (userId, productId) =>
+    db.prepare(`SELECT * FROM purchase_checks WHERE user_id=? AND product_id=? AND status='pending' ORDER BY id DESC LIMIT 1`)
+      .get(String(userId), String(productId)) || null,
+  decide: (id, status, decidedBy) =>
+    db.prepare(`UPDATE purchase_checks SET status=?, decided_by=?, decided_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'`)
+      .run(String(status), String(decidedBy || ""), Number(id)),
+  recent: (limit) =>
+    db.prepare(`SELECT * FROM purchase_checks ORDER BY id DESC LIMIT ?`).all(Number(limit) || 10),
 };
 
 module.exports = db;

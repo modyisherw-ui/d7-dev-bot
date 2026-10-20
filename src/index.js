@@ -338,13 +338,13 @@ function ordersSection() {
         .setDescription(`${o.user_id} • ${formatPrice(o.price,o.currency)}`.slice(0, 100))
         .setValue(String(o.id))))));
   }
-  // ⬇️ الروم اللي تُرسل فيه الطلبات
-  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_ch", "orders", `🔔 روم إرسال الطلبات — الحالي: ${chLabel("orders")}`)));
+  // ⬇️ سجل الطلبات: كل طلب وكل تغيير حالة ينزل برسالته الخاصة
+  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_ch", "orders", `📋 روم سجل الطلبات — الحالي: ${chLabel("orders")}`)));
   rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("panel:orders").setLabel("🔄 تحديث").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary)
   ));
-  return { embeds: [embed("🧾 الطلبات", `${desc}\n\nأكّد الدفع من القائمة بالأعلى، والعميل ياخذ رتبة المنتج تلقائياً.\nروم إرسال الطلبات يُحدَّد من القائمة بالأسفل.`)], components: rows.slice(0, 5) };
+  return { embeds: [embed("🧾 الطلبات", `${desc}\n\nأكّد الدفع من القائمة بالأعلى، والعميل ياخذ رتبة المنتج تلقائياً.\n**📋 روم سجل الطلبات:** كل تأكيد أو تسليم أو إلغاء ينزل فيه رسالة جديدة باسم المنتج ورتبته وسعره وحالته ومشتريه وتقييمه — كل طلب برسالته، مو لستة مجمّعة.`)], components: rows.slice(0, 5) };
 }
 
 // ─────────── قسم التقييمات (نسخة من NSR Hub) ───────────
@@ -520,6 +520,43 @@ async function refreshAdminDashboard(guild) {
   else await channel.send({ embeds: [e] }).catch(() => {});
 }
 
+// ─────────── سجل الطلبات: إيمبد واحد لكل طلب ───────────
+// روم الطلبات يجيب حالة الطلب، وكل تغيير حالة ينزل برسالته الخاصة
+// (مو تعديل الرسالة السابقة، ومو لستة مجمّعة) عشان يظل الأرشيف واضح.
+const ORDER_STATUS = {
+  pending:   { label: "بانتظار التأكيد", emoji: "⏳" },
+  confirmed: { label: "قيد التنفيذ",     emoji: "🚚" },
+  delivered: { label: "تم التنفيذ",      emoji: "✅" },
+  cancelled: { label: "ملغى",            emoji: "❌" },
+};
+
+// order لازم يجي معه name / role_id / price / currency / user_id / status
+function orderFeedEmbed(order, extra = {}) {
+  const st = ORDER_STATUS[order.status] || { label: order.status || "غير معروفة", emoji: "ℹ️" };
+  // لو ما قيّم المنتج نقولها صراحةً بدل ما تظهر خانة فاضية
+  const rating = order.rating ? `⭐ ${order.rating}/5` : "لم يتم التقييم";
+  return embed(`🛒 ${st.emoji} ${st.label} — طلب #${order.id}`, [
+    `**اسم المنتج:** ${order.name}`,
+    `**الرتبة:** ${order.role_id ? `<@&${order.role_id}>` : "بدون رتبة"}`,
+    `**السعر:** ${formatPrice(order.price, order.currency)}`,
+    `**حالة الطلب:** ${st.emoji} ${st.label}`,
+    `**المشتري:** <@${order.user_id}>`,
+    `**التقييم:** ${rating}`,
+    order.confirmed_by ? `**أكده:** <@${order.confirmed_by}>` : "",
+    extra.note ? `**ملاحظة:** ${extra.note}` : "",
+  ].filter(Boolean).join("\n"));
+}
+
+// يجيب الطلب مع بيانات منتجه حتى يقدر يبني إيمبد السجل
+function orderForFeed(id) {
+  return db.prepare("SELECT o.*, p.name, p.role_id, p.price, p.currency FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=?").get(id) || null;
+}
+
+async function postOrderFeed(guild, order, extra) {
+  // لو الروم مش منضبط ما نفشل العملية كلها — الإشعار مكمّل مو أساسي
+  return sendToConfiguredChannel(guild, "orders", { embeds: [orderFeedEmbed(order, extra)] }).catch(() => false);
+}
+
 // ─────────── تأكيد طلب: يعطي الرول وينبّه روم الطلبات ───────────
 async function confirmOrder(interaction, id) {
   const order = db.prepare("SELECT o.*, p.name, p.role_id, p.price, p.currency FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=?").get(id);
@@ -534,21 +571,14 @@ async function confirmOrder(interaction, id) {
     await member.roles.add(order.role_id, `S2A DEV order #${id} confirmed`).catch(() => {});
   }
   db.prepare("UPDATE orders SET status='confirmed',confirmed_at=CURRENT_TIMESTAMP,confirmed_by=? WHERE id=?").run(interaction.user.id, id);
+  order.status = "confirmed";
+  order.confirmed_by = interaction.user.id;
   if (config.purchase.sendThankYouDM) {
     await member.send({ embeds: [embed("Thank you for your purchase!", `Your purchase of **${order.name}** has been confirmed.\nOrder: #${id}\nProduct role: ${order.role_id ? `<@&${order.role_id}>` : "No role configured"}`)] }).catch(() => {});
   }
   // رسالة التقييم ترسل من مستمع رتب المنتجات (أدناه) — نفس النضام المستخدم في NSR Hub
-  // إشعار روم الطلبات: "فلان اشترى هذا المنتج"
-  await sendToConfiguredChannel(guild, "orders", {
-    embeds: [embed("🛒 شراء جديد", [
-      `**اشترى العضو:** <@${order.user_id}>`,
-      `**المنتج:** ${order.name}`,
-      `**السعر:** ${formatPrice(order.price, order.currency)}`,
-      `**الطلب:** #${id}`,
-      order.role_id ? `**الرول المُعطي:** <@&${order.role_id}>` : "",
-      `**أكده:** ${interaction.user}`,
-    ].filter(Boolean).join("\n"))],
-  });
+  // سجل الطلبات: رسالة جديدة للطلب تبيّن اسم المنتج ورتبته وسعره وحالته ومشتريه وتقييمه
+  await postOrderFeed(guild, order);
   await refreshAdminDashboard(guild);
   return interaction.reply({ content: `✅ تم تأكيد الطلب #${id} وأعطيت ${member} رول **${order.name}**.`, ephemeral: true });
 }
@@ -828,13 +858,32 @@ client.on(Events.InteractionCreate, async interaction => {
       if (commandName === "order-deliver") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
         const id = interaction.options.getInteger("order_id", true);
-        const order = db.prepare("SELECT * FROM orders WHERE id=?").get(id);
+        const order = orderForFeed(id);
         if (!order) return interaction.reply({ content: "Order not found.", ephemeral: true });
+        if (order.status === "cancelled") return interaction.reply({ content: `Order #${id} is cancelled and cannot be delivered.`, ephemeral: true });
+        if (order.status === "delivered") return interaction.reply({ content: `Order #${id} was already delivered.`, ephemeral: true });
         const now = Date.now();
         const start = order.confirmed_at ? new Date(order.confirmed_at.replace(" ", "T") + "Z").getTime() : now;
         db.prepare("UPDATE orders SET status='delivered',delivered_at=CURRENT_TIMESTAMP,delivery_seconds=? WHERE id=?").run(Math.max(0, Math.floor((now-start)/1000)), id);
+        order.status = "delivered";
+        // رسالة جديدة في سجل الطلبات تبيّن إن الحالة صارت "تم التنفيذ"
+        await postOrderFeed(interaction.guild, order);
         await refreshAdminDashboard(interaction.guild);
         return interaction.reply({ content: `Order #${id} marked as delivered.`, ephemeral: true });
+      }
+      if (commandName === "order-cancel") {
+        if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+        const id = interaction.options.getInteger("order_id", true);
+        const order = orderForFeed(id);
+        if (!order) return interaction.reply({ content: "Order not found.", ephemeral: true });
+        if (order.status === "cancelled") return interaction.reply({ content: `Order #${id} is already cancelled.`, ephemeral: true });
+        const note = (interaction.options.getString("reason") || "").trim();
+        db.prepare("UPDATE orders SET status='cancelled' WHERE id=?").run(id);
+        order.status = "cancelled";
+        // ما نسحب رول المنتج تلقائياً — الإلغاء يوثّق الحالة بس، والسحب قرار موظف
+        await postOrderFeed(interaction.guild, order, { note: note || undefined });
+        await refreshAdminDashboard(interaction.guild);
+        return interaction.reply({ content: `Order #${id} cancelled.${order.role_id ? ` Note: the product role <@&${order.role_id}> was not removed.` : ""}`, ephemeral: true });
       }
       if (commandName === "orders") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });

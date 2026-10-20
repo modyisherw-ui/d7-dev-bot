@@ -23,6 +23,9 @@ const commands = [
     .addIntegerOption(o=>o.setName("order_id").setDescription("Order ID").setRequired(true).setMinValue(1)),
   new SlashCommandBuilder().setName("order-deliver").setDescription("Mark an order as delivered")
     .addIntegerOption(o=>o.setName("order_id").setDescription("Order ID").setRequired(true).setMinValue(1)),
+  new SlashCommandBuilder().setName("order-cancel").setDescription("Cancel an order and post the status to the order log")
+    .addIntegerOption(o=>o.setName("order_id").setDescription("Order ID").setRequired(true).setMinValue(1))
+    .addStringOption(o=>o.setName("reason").setDescription("Reason shown on the log entry").setRequired(false)),
   new SlashCommandBuilder().setName("orders").setDescription("Show recent orders"),
   new SlashCommandBuilder().setName("dashboard-refresh").setDescription("Refresh admin dashboard"),
   new SlashCommandBuilder().setName("embed-send").setDescription("Send a custom embed")

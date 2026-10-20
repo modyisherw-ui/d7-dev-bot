@@ -77,9 +77,9 @@
     "title": "Welcome to S2A DEV!",
     "message": "S2A DEV is a professional development studio specializing in high-quality FiveM scripts, modern UI designs, and innovative solutions built to enhance your server experience.",
     "storeRoleId": "",
-    "storeChannelId": "",
-    "helpChannelId": "",
-    "releasesChannelId": "",
+    "storeChannelId": "1561445389939253298",
+    "helpChannelId": "1561449062564102144",
+    "releasesChannelId": "1561446637233250424",
     "imageUrl": "",
     "footer": "All Rights Reserved [S2A DEV]"
   },
@@ -89,6 +89,6 @@
   "autoRoles": {
     "enabled": true,
     "memberRoleId": "1561454856764399626",
-    "botRoleId": ""
+    "botRoleId": "1561454969201234032"
   }
 }

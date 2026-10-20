@@ -31,3 +31,5 @@ D7 Dev bot online as D7 Dev#6918
 (node:2445) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
 (Use `node --trace-warnings ...` to show where the warning was created)
 D7 Dev bot online as S2A Dev#6918
+(node:2456) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
+(Use `node --trace-warnings ...` to show where the warning was created)

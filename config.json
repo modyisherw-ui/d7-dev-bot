@@ -73,8 +73,15 @@
   },
   "welcome": {
     "enabled": true,
-    "message": "Welcome {user} to **D7 Dev**! Please read the rules.",
-    "imageUrl": ""
+    "sendDM": true,
+    "title": "Welcome to S2A DEV!",
+    "message": "S2A DEV is a professional development studio specializing in high-quality FiveM scripts, modern UI designs, and innovative solutions built to enhance your server experience.",
+    "storeRoleId": "",
+    "storeChannelId": "",
+    "helpChannelId": "",
+    "releasesChannelId": "",
+    "imageUrl": "",
+    "footer": "All Rights Reserved [S2A DEV]"
   },
   "permissions": {
     "adminUserIds": []

@@ -73,7 +73,7 @@ function mainPanel() {
     "⭐ **Ratings** — نظام التقييمات وروم التقييمات",
     "📊 **Analytics** — المبيعات والتقييمات",
     "🛒 **Store Settings** — إعدادات الشراء والخاص",
-    "👋 **Welcome** — رسالة الترحيب",
+    "👋 **Welcome** — رسالة الترحيب على الخاص + الروابط والصورة",
     "🏷️ **Auto Roles** — الرتب التلقائية",
     "🔐 **Permissions** — مدراء البوت ورتب الإدارة",
     "📈 **Ticket Stats** — إحصائيات التذاكر",
@@ -138,10 +138,100 @@ function channelsSection() {
     new ActionRowBuilder().addComponents(channelRow("d7_ch_orders", "orders", `🔔 روم تنبيه الطلبات — الحالي: ${chLabel("orders")}`)),
     new ActionRowBuilder().addComponents(channelRow("d7_ch_sales", "salesLogs", `🛒 روم طلبات الشراء — الحالي: ${chLabel("salesLogs")}`)),
     new ActionRowBuilder().addComponents(channelRow("d7_ch_showcase", "productShowcase", `🛍️ روم عرض المنتجات — الحالي: ${chLabel("productShowcase")}`)),
+    new ActionRowBuilder().addComponents(channelRow("d7_welcome_ch", "welcome", `👋 روم الترحيب (احتياطي) — الحالي: ${chLabel("welcome")}`)),
     // ⚠️ روم التقييمات ما عاد هنا — صار في قسم التقييمات فقط حتى ما يتكرر
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 القائمة الرئيسية").setStyle(ButtonStyle.Secondary)),
   ];
   return { embeds: [embed("📌 الرومات", "اختر الروم المناسب من كل قائمة — يُحفظ فوراً.\nروم التقييمات تُحدَّد من قسم **⭐ Ratings**.")], components: rows };
+}
+
+// ─────────── قسم الترحيب ───────────
+// رسالة الترحيب تُرسل للعضو على **الخاص**، وإن فشل الخاص تُنشر في روم الترحيب المحدد.
+function ensureWelcome() {
+  const w = (config.welcome ||= {});
+  if (w.enabled === undefined) w.enabled = true;
+  if (w.sendDM === undefined) w.sendDM = true;
+  w.title ??= "Welcome to S2A DEV!";
+  w.message ??= "S2A DEV is a professional development studio specializing in high-quality FiveM scripts, modern UI designs, and innovative solutions built to enhance your server experience.";
+  w.footer ??= "All Rights Reserved [S2A DEV]";
+  w.storeRoleId ??= "";
+  w.storeChannelId ??= "";
+  w.helpChannelId ??= "";
+  w.releasesChannelId ??= "";
+  w.imageUrl ??= "";
+  return w;
+}
+
+// صفوف روابط الترحيب — كل سطر يظهر فقط إذا حددت له رتبة أو روم
+function welcomeLines() {
+  const w = ensureWelcome();
+  const lines = [];
+  const store = [];
+  if (safeChannelId(w.storeRoleId)) store.push(`<@&${w.storeRoleId}>`);
+  if (safeChannelId(w.storeChannelId)) store.push(`<#${w.storeChannelId}>`);
+  if (store.length) lines.push(`▸ **Explore Our Store:** ${store.join("  ")}`);
+  if (safeChannelId(w.helpChannelId)) lines.push(`▸ **Need Help?:** <#${w.helpChannelId}>`);
+  if (safeChannelId(w.releasesChannelId)) lines.push(`▸ **Latest Releases:** <#${w.releasesChannelId}>`);
+  return lines;
+}
+
+// حمولة رسالة الترحيب — نفس الشي اللي يشوفه العضو في الخاص والمعاينة في اللوحة
+function welcomePayload() {
+  const w = ensureWelcome();
+  const lines = welcomeLines();
+  const body = [w.message || "", lines.length ? "" : null, ...lines]
+    .filter(x => x !== null && x !== "")
+    .join("\n");
+  const e = new EmbedBuilder()
+    .setColor(config.brand?.color || "#19D7CC")
+    .setTitle(w.title || "Welcome!")
+    .setDescription(body || " ")
+    .setFooter({ text: w.footer || config.brand?.footer || "D7 Dev" });
+  if (safeChannelId(w.imageUrl) || /^https?:\/\//.test(w.imageUrl || "")) e.setImage(w.imageUrl);
+  return { embeds: [e] };
+}
+
+function welcomeChannelRow(id, currentId, placeholder) {
+  const sel = new ChannelSelectMenuBuilder()
+    .setCustomId(id)
+    .setPlaceholder(placeholder)
+    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    // min 0 حتى تقدر تمسح الرابط وتختفي من الرسالة
+    .setMinValues(0)
+    .setMaxValues(1);
+  if (safeChannelId(currentId)) sel.setDefaultChannels([currentId]);
+  return sel;
+}
+
+function welcomeSection(statusText) {
+  const w = ensureWelcome();
+
+  const roleSel = new RoleSelectMenuBuilder()
+    .setCustomId("d7_welcome_role")
+    .setPlaceholder(w.storeRoleId ? `🛍️ رتبة المتجر — الحالية: <@&${w.storeRoleId}>` : "🛍️ رتبة Explore Our Store — غير محددة")
+    .setMinValues(0)
+    .setMaxValues(1);
+  if (safeChannelId(w.storeRoleId)) roleSel.setDefaultRoles([w.storeRoleId]);
+
+  const rows = [
+    new ActionRowBuilder().addComponents(roleSel),
+    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_store", w.storeChannelId, `🏪 روم المتجر — ${w.storeChannelId ? `<#${w.storeChannelId}>` : "غير محدد"}`)),
+    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_help", w.helpChannelId, `🆘 روم الدعم (Need Help) — ${w.helpChannelId ? `<#${w.helpChannelId}>` : "غير محدد"}`)),
+    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_releases", w.releasesChannelId, `🚀 روم آخر الإصدارات — ${w.releasesChannelId ? `<#${w.releasesChannelId}>` : "غير محدد"}`)),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("panel:welcome:toggle").setLabel(w.enabled === false ? "❌ الترحيب: مطفأ" : "✅ الترحيب: مفعّل").setStyle(w.enabled === false ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("panel:welcome:mode").setLabel(w.sendDM === false ? "🗨️ الإرسال: روم الترحيب" : "📨 الإرسال: خاص العضو").setStyle(w.sendDM === false ? ButtonStyle.Secondary : ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("panel:welcome:text").setLabel("✏️ النص والعنوان").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel:welcome:image").setLabel("🖼️ الصورة").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+  // المعاينة = رسالة الترحيب نفسها بالضبط
+  const preview = welcomePayload();
+  const meta = [
+    `**روم الترحيب (احتياطي):** ${chLabel("welcome")} — لو رفض العضو فتح الخاص تنشر الرسالة هنا.`,
+  ];
+  return { content: [statusText, ...meta].filter(Boolean).join("\n"), embeds: preview.embeds, components: rows };
 }
 
 // ─────────── قسم التذاكر (مطابق لصورة لوحة تحكم NSR) ───────────
@@ -639,12 +729,18 @@ client.on(Events.GuildMemberAdd, async member => {
     }
   }
   if (!config.welcome?.enabled) return;
+  const payload = welcomePayload();
+
+  // الوضع الافتراضي: رسالة خاصة للعضو. ما نذكره — يعرف نفسه.
+  if (config.welcome.sendDM !== false) {
+    const sent = await member.send(payload).then(() => true).catch(() => false);
+    if (sent) return;
+    // فشل الخاص (العضو قافله) → نجرب روم الترحيب المحدد كاحتياطي.
+  }
+
   const channel = channelFromConfig(member.guild, "welcome");
   if (!channel?.isTextBased()) return;
-  const message = (config.welcome.message || "Welcome {user}").replaceAll("{user}", `<@${member.id}>`).replaceAll("{server}", member.guild.name);
-  const e = embed("Welcome to D7 Dev", message);
-  if (config.welcome.imageUrl) e.setImage(config.welcome.imageUrl);
-  await channel.send({ content: `<@${member.id}>`, embeds: [e] }).catch(() => {});
+  await channel.send({ ...payload, content: `<@${member.id}>` }).catch(() => {});
 });
 
 client.on(Events.InteractionCreate, async interaction => {
@@ -899,9 +995,42 @@ client.on(Events.InteractionCreate, async interaction => {
           return interaction.update({ embeds: [embed("Control Center · Analytics", desc)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:refresh").setLabel("Refresh Admin Dashboard").setStyle(ButtonStyle.Success))] });
         }
         if (section === "welcome") {
-          const modal = new ModalBuilder().setCustomId("panel_modal:welcome").setTitle("Welcome Settings");
-          modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("body").setLabel("Welcome text ({user}, {server})").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1500)),new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("image").setLabel("Direct image URL (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(300)));
-          return interaction.showModal(modal);
+          const flag = parts[1];
+          if (flag === "toggle") {
+            ensureWelcome();
+            config.welcome.enabled = config.welcome.enabled === false;
+            saveConfig();
+            return interaction.update(welcomeSection(config.welcome.enabled
+              ? "✅ فُعّلت رسالة الترحيب — توصل للعضو على الخاص عند انضمامه."
+              : "❌ أُوقفت رسالة الترحيب. ما ترسل لأي عضو جديد."));
+          }
+          if (flag === "mode") {
+            ensureWelcome();
+            config.welcome.sendDM = config.welcome.sendDM === false;
+            saveConfig();
+            return interaction.update(welcomeSection(config.welcome.sendDM
+              ? "📨 راح توصل رسالة الترحيب على **خاص** العضو — وإن كان خاصه مقفول تنشر في روم الترحيب."
+              : "🗨️ راح تُنشر رسالة الترحيب مباشرة في **روم الترحيب** المحدد من قسم الرومات."));
+          }
+          if (flag === "text") {
+            const w = ensureWelcome();
+            const modal = new ModalBuilder().setCustomId("panel_modal:welcome_text").setTitle("نص رسالة الترحيب");
+            modal.addComponents(
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("title").setLabel("العنوان (Welcome to ...)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256).setValue(String(w.title || ""))),
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("body").setLabel("النص التعريفي").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000).setValue(String(w.message || ""))),
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("footer").setLabel("الفوتر أسفل الصورة (اختياري)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(200).setValue(String(w.footer || ""))),
+            );
+            return interaction.showModal(modal);
+          }
+          if (flag === "image") {
+            const w = ensureWelcome();
+            const modal = new ModalBuilder().setCustomId("panel_modal:welcome_image").setTitle("صورة الترحيب");
+            modal.addComponents(
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("url").setLabel("رابط صورة مباشر تظهر تحت الرسالة").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500).setValue(String(w.imageUrl || ""))),
+            );
+            return interaction.showModal(modal);
+          }
+          return interaction.update(welcomeSection());
         }
         if (section === "autoroles") return interaction.update(autorolesSection());
         if (section === "autoroles-toggle") {
@@ -1047,7 +1176,7 @@ client.on(Events.InteractionCreate, async interaction => {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       // ملاحظة: "d7_ch_reviews" محفوظ للتوافق مع لوحات منشورة سابقاً —
       // القائمة نفسها شلتناها من قسم الرومات (صارت في قسم التقييمات فقط).
-      const map = { "d7_ch_orders": "orders", "d7_ch_sales": "salesLogs", "d7_ch_showcase": "productShowcase", "d7_ch_reviews": "reviews", "d7_order_ch": "orders", "d7_ratings_ch": "reviews", "d7_pcheck_ch": "purchaseChecks" };
+      const map = { "d7_ch_orders": "orders", "d7_ch_sales": "salesLogs", "d7_ch_showcase": "productShowcase", "d7_ch_reviews": "reviews", "d7_order_ch": "orders", "d7_ratings_ch": "reviews", "d7_pcheck_ch": "purchaseChecks", "d7_welcome_ch": "welcome" };
       const key = map[interaction.customId];
       if (!key) return;
       config.channels ||= {};
@@ -1062,6 +1191,28 @@ client.on(Events.InteractionCreate, async interaction => {
     // ─────────── لوحة التذاكر: فتح تذكرة ───────────
     if (interaction.isStringSelectMenu() && interaction.customId === "d7_ticket_type") {
       return tickets.handleSelect(interaction);
+    }
+
+    // ─────────── قسم الترحيب: الرومات والرتبة ───────────
+    const welcomeChMap = {
+      "d7_welcome_store": "storeChannelId",
+      "d7_welcome_help": "helpChannelId",
+      "d7_welcome_releases": "releasesChannelId",
+    };
+    if (interaction.isChannelSelectMenu() && welcomeChMap[interaction.customId]) {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      ensureWelcome();
+      // min 0 → الإرسال بدون قيمة يعني مسح الرابط (تختفي من رسالة الترحيب)
+      config.welcome[welcomeChMap[interaction.customId]] = interaction.values[0] || "";
+      saveConfig();
+      return interaction.update(welcomeSection(interaction.values[0] ? "✅ تم حفظ الروم." : "🗑️ تم مسح الرابط — هذا السطر ما يظهر في رسالة الترحيب."));
+    }
+    if (interaction.isRoleSelectMenu() && interaction.customId === "d7_welcome_role") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      ensureWelcome();
+      config.welcome.storeRoleId = interaction.values[0] || "";
+      saveConfig();
+      return interaction.update(welcomeSection(interaction.values[0] ? "✅ تم حفظ رتبة المتجر." : "🗑️ تم مسح الرتبة — سطر المتجر ما يظهر في رسالة الترحيب."));
     }
 
     // ─────────── نظام التقييمات (نسخة من NSR Hub) ───────────
@@ -1248,11 +1399,25 @@ client.on(Events.InteractionCreate, async interaction => {
         pending.name = interaction.fields.getTextInputValue("name").trim();
         return finishProduct(interaction);
       }
-      if (kind === "welcome") {
-        config.welcome.message = interaction.fields.getTextInputValue("body");
-        config.welcome.imageUrl = (interaction.fields.getTextInputValue("image") || "").trim();
-        fs.writeFileSync(path.join(__dirname, "..", "config.json"), JSON.stringify(config, null, 2));
-        return interaction.reply({ content: "Welcome message and image saved.", ephemeral: true });
+      if (kind === "welcome_text") {
+        ensureWelcome();
+        config.welcome.title = interaction.fields.getTextInputValue("title").trim() || "Welcome!";
+        config.welcome.message = interaction.fields.getTextInputValue("body").trim();
+        config.welcome.footer = interaction.fields.getTextInputValue("footer").trim();
+        saveConfig();
+        await interaction.reply({ content: "✅ تم حفظ نص رسالة الترحيب.", ephemeral: true });
+        return interaction.message?.edit(welcomeSection("✅ تم حفظ النص.")).catch(() => {});
+      }
+      if (kind === "welcome_image") {
+        ensureWelcome();
+        const url = interaction.fields.getTextInputValue("url").trim();
+        if (url && !/^https?:\/\//.test(url)) {
+          return interaction.reply({ content: "❌ لازم يبدأ الرابط بـ `https://` أو `http://`.", ephemeral: true });
+        }
+        config.welcome.imageUrl = url;
+        saveConfig();
+        await interaction.reply({ content: url ? "✅ تم حفظ صورة الترحيب." : "✅ تم مسح صورة الترحيب.", ephemeral: true });
+        return interaction.message?.edit(welcomeSection(url ? "✅ تم حفظ الصورة." : "✅ تم مسح الصورة.")).catch(() => {});
       }
       const title = interaction.fields.getTextInputValue("title");
       const body = interaction.fields.getTextInputValue("body");

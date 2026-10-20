@@ -1,4 +1,4 @@
-name: Run D7 Dev Bot 24/7
+name: Run S2A DEV Bot 24/7
 
 on:
   workflow_dispatch:

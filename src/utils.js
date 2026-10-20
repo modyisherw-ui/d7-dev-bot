@@ -12,7 +12,7 @@ function embed(title, description = "") {
     .setThumbnail(EMBED_THUMB)
     .setTitle(title)
     .setDescription(description)
-    .setFooter({ text: config.brand.footer || "D7 Dev" })
+    .setFooter({ text: config.brand.footer || "S2A DEV" })
     .setTimestamp();
 }
 

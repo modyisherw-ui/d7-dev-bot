@@ -1,8 +1,8 @@
 {
   "brand": {
-    "name": "D7 Dev",
+    "name": "S2A DEV",
     "color": "#2fa2fa",
-    "footer": "D7 Dev • Store System"
+    "footer": "S2A DEV • Store System"
   },
   "channels": {
     "welcome": "",
@@ -33,7 +33,7 @@
     "panel": {
       "title": "🎫 Support Tickets",
       "description": "Welcome to our support system!\nSelect a ticket type from the menu below and a private channel will be created for you.",
-      "footer": "D7 Dev • Store System"
+      "footer": "S2A DEV • Store System"
     },
     "ticketTypes": [
       {

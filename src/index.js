@@ -64,7 +64,7 @@ function mainPanel() {
     new ButtonBuilder().setCustomId("panel:ticket-stats").setLabel("Ticket Stats").setEmoji("📈").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("panel:refresh").setLabel("Refresh Dashboard").setEmoji("🔄").setStyle(ButtonStyle.Success)
   );
-  const e = embed("D7 Dev • Control Center", [
+  const e = embed("S2A DEV • Control Center", [
     "🛍️ **Products** — إضافة منتج والنشر في الرومات",
     "🧾 **Orders** — الطلبات وتأكيد الدفع وروم إرسالها",
     "🎫 **Tickets** — أنواع التذاكر ولوحة الإرسال",
@@ -187,7 +187,7 @@ function welcomePayload() {
     .setThumbnail(EMBED_THUMB)
     .setTitle(w.title || "Welcome!")
     .setDescription(body || " ")
-    .setFooter({ text: w.footer || config.brand?.footer || "D7 Dev" });
+    .setFooter({ text: w.footer || config.brand?.footer || "S2A DEV" });
   if (safeChannelId(w.imageUrl) || /^https?:\/\//.test(w.imageUrl || "")) e.setImage(w.imageUrl);
   return { embeds: [e] };
 }
@@ -259,7 +259,7 @@ function ticketsSection() {
       `**روم اللوق:** ${safeChannelId(t.logChannelId) ? `<#${t.logChannelId}>` : "غير محدد"}`,
       `**رتب الدعم:** ${(t.staffRoles || []).length ? t.staffRoles.map(r => `<@&${r}>`).join(" ") : "غير محددة"}`,
     ].join("\n"))
-    .setFooter({ text: config.brand?.footer || "D7 Dev" })
+    .setFooter({ text: config.brand?.footer || "S2A DEV" })
     .setTimestamp();
 
   const rows = [];
@@ -505,7 +505,7 @@ async function refreshAdminDashboard(guild) {
   const openTickets = db.prepare("SELECT COUNT(*) n FROM tickets WHERE status='open'").get().n;
   const top = db.prepare(`SELECT p.name, COUNT(o.id) n FROM products p LEFT JOIN orders o ON o.product_id=p.id AND o.status IN ('confirmed','delivered') GROUP BY p.id ORDER BY n DESC, p.name LIMIT 8`).all();
   const body = top.length ? top.map((x, i) => `**${i+1}. ${x.name}** — ${x.n} purchase(s)`).join("\n") : "No products yet.";
-  const e = embed("D7 Dev • Admin Dashboard", "Live store overview. Use the admin commands to manage products and orders.")
+  const e = embed("S2A DEV • Admin Dashboard", "Live store overview. Use the admin commands to manage products and orders.")
     .addFields(
       { name: "Confirmed orders", value: String(totalOrders), inline: true },
       { name: "Pending orders", value: String(pending), inline: true },
@@ -514,7 +514,8 @@ async function refreshAdminDashboard(guild) {
       { name: "Best sellers", value: body }
     );
   const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
-  const old = messages?.find(m => m.author.id === client.user.id && m.embeds[0]?.title === "D7 Dev • Admin Dashboard");
+  // يطابق باللاحقة فتصحّ اللوحة القديمة (كانت معلنة باسم D7 Dev) بدل ما نكرّرها
+  const old = messages?.find(m => m.author.id === client.user.id && /Admin Dashboard$/.test(m.embeds[0]?.title || ""));
   if (old) await old.edit({ embeds: [e] }).catch(() => {});
   else await channel.send({ embeds: [e] }).catch(() => {});
 }
@@ -530,7 +531,7 @@ async function confirmOrder(interaction, id) {
   if (order.role_id) {
     // تأكيد الدفع من الموظف نفسه → ما نطلب تأكيداً ثانياً قبل رسالة التقييم
     preApprove(order.user_id, order.product_id);
-    await member.roles.add(order.role_id, `D7 Dev order #${id} confirmed`).catch(() => {});
+    await member.roles.add(order.role_id, `S2A DEV order #${id} confirmed`).catch(() => {});
   }
   db.prepare("UPDATE orders SET status='confirmed',confirmed_at=CURRENT_TIMESTAMP,confirmed_by=? WHERE id=?").run(interaction.user.id, id);
   if (config.purchase.sendThankYouDM) {
@@ -718,7 +719,7 @@ client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
 });
 
 client.once(Events.ClientReady, async c => {
-  console.log(`D7 Dev bot online as ${c.user.tag}`);
+  console.log(`S2A DEV bot online as ${c.user.tag}`);
   for (const guild of c.guilds.cache.values()) await refreshAdminDashboard(guild);
 });
 
@@ -727,7 +728,7 @@ client.on(Events.GuildMemberAdd, async member => {
   if (config.autoRoles?.enabled) {
     const roleId = member.user.bot ? config.autoRoles.botRoleId : config.autoRoles.memberRoleId;
     if (roleId && member.guild.roles.cache.has(roleId)) {
-      await member.roles.add(roleId, "D7 Dev automatic join role").catch(err => console.error("Auto-role assignment failed:", err.message));
+      await member.roles.add(roleId, "S2A DEV automatic join role").catch(err => console.error("Auto-role assignment failed:", err.message));
     }
   }
   if (!config.welcome?.enabled) return;
@@ -1319,7 +1320,7 @@ client.on(Events.InteractionCreate, async interaction => {
       modal.addComponents(
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_title").setLabel("عنوان اللوحة").setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder((t.panel?.title || "🎫 Support Tickets").slice(0, 100)).setMaxLength(100)),
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_body").setLabel("وصف اللوحة").setStyle(TextInputStyle.Paragraph).setRequired(true).setPlaceholder("Welcome to our support system! ...").setMaxLength(900)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_footer").setLabel("الفوتر (اختياري)").setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder((t.panel?.footer || config.brand?.footer || "D7 Dev").slice(0, 100)).setMaxLength(100)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_footer").setLabel("الفوتر (اختياري)").setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder((t.panel?.footer || config.brand?.footer || "S2A DEV").slice(0, 100)).setMaxLength(100)),
       );
       return interaction.showModal(modal);
     }
@@ -1363,7 +1364,7 @@ client.on(Events.InteractionCreate, async interaction => {
       t.panel ||= {};
       t.panel.title = interaction.fields.getTextInputValue("tk_title").trim();
       t.panel.description = interaction.fields.getTextInputValue("tk_body").trim();
-      t.panel.footer = (interaction.fields.getTextInputValue("tk_footer") || "").trim() || config.brand?.footer || "D7 Dev";
+      t.panel.footer = (interaction.fields.getTextInputValue("tk_footer") || "").trim() || config.brand?.footer || "S2A DEV";
       tickets.saveConfig();
       await interaction.reply({ content: "✅ تم حفظ نص لوحة التذاكر.", ephemeral: true });
       return interaction.message?.edit(ticketsSection()).catch(() => {});

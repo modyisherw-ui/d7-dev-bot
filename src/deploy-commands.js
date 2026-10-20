@@ -2,8 +2,8 @@ require("dotenv").config();
 const { REST, Routes, SlashCommandBuilder, ChannelType, PermissionFlagsBits } = require("discord.js");
 
 const commands = [
-  new SlashCommandBuilder().setName("panel").setDescription("Open the unified D7 Dev control panel"),
-  new SlashCommandBuilder().setName("ticket-panel").setDescription("Post the D7 Dev ticket panel"),
+  new SlashCommandBuilder().setName("panel").setDescription("Open the unified S2A DEV control panel"),
+  new SlashCommandBuilder().setName("ticket-panel").setDescription("Post the S2A DEV ticket panel"),
   new SlashCommandBuilder().setName("products").setDescription("List products"),
   new SlashCommandBuilder().setName("product-add").setDescription("Add a store product (role → price → name)")
     .addStringOption(o=>o.setName("name").setDescription("Product name (skip the name step)").setRequired(false))
@@ -51,6 +51,6 @@ async function main() {
   }
   const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
   await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commands });
-  console.log(`Deployed ${commands.length} D7 Dev slash commands.`);
+  console.log(`Deployed ${commands.length} S2A DEV slash commands.`);
 }
 main().catch(e => { console.error(e); process.exit(1); });

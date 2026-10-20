@@ -18,7 +18,7 @@ const TICKET_COLOR = EMBED_COLOR; // أزرق ثابت للتذاكر
 
 function ensureConfig() {
   config.tickets ||= {};
-  config.tickets.panel ||= { title: "🎫 D7 Dev Support", description: "اختر نوع التذكرة من القائمة بالأسفل." };
+  config.tickets.panel ||= { title: "🎫 S2A DEV Support", description: "اختر نوع التذكرة من القائمة بالأسفل." };
   config.tickets.staffRoles ||= [];
   config.tickets.ticketTypes ||= [];
   config.tickets.categoryId ||= "";
@@ -71,7 +71,7 @@ function panelEmbed() {
     .setThumbnail(EMBED_THUMB)
     .setTitle(p.title || "🎫 Support Tickets")
     .setDescription(`${p.description || ""}\n\n${lines}`)
-    .setFooter({ text: p.footer || config.brand?.footer || "D7 Dev" });
+    .setFooter({ text: p.footer || config.brand?.footer || "S2A DEV" });
 }
 
 // ─────────── أدوات ───────────
@@ -131,7 +131,7 @@ async function handleSelect(interaction) {
       name: `${type.emoji || "🎫"} ticket-${number}`,
       type: ChannelType.GuildText,
       parent: category || undefined,
-      topic: `D7 ticket #${number} | ${type.label} | User ${interaction.user.id}`,
+      topic: `S2A ticket #${number} | ${type.label} | User ${interaction.user.id}`,
       permissionOverwrites: [
         { id: interaction.guild.roles.everyone.id, deny: ["ViewChannel"] },
         { id: interaction.user.id, allow: ["ViewChannel", "SendMessages", "ReadMessageHistory", "AttachFiles"] },
@@ -145,7 +145,7 @@ async function handleSelect(interaction) {
       .setThumbnail(EMBED_THUMB)
       .setTitle(`${type.emoji || "🎫"} ${type.label} #${number}`)
       .setDescription(`Welcome <@${interaction.user.id}>!\nPlease describe your issue and our staff will assist you shortly.`)
-      .setFooter({ text: config.brand?.footer || "D7 Dev" })
+      .setFooter({ text: config.brand?.footer || "S2A DEV" })
       .setTimestamp();
     const controlRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("d7_tk_claim").setLabel("📥 Claim").setStyle(ButtonStyle.Success),
@@ -236,7 +236,7 @@ async function handleClose(interaction) {
     await user.send({
       embeds: [new EmbedBuilder().setColor(TICKET_COLOR).setThumbnail(EMBED_THUMB).setTitle("🔒 Your ticket has been closed")
         .setDescription(`Your ticket **#${ticket.number}** has been closed. If you need more help, feel free to open a new ticket!\nتم قفل تذكرتك **رقم ${ticket.number}**، إذا كنت بحاجة لأي مساعدة يمكنك فتح تذكرة جديدة.`)
-        .setFooter({ text: config.brand?.footer || "D7 Dev" })
+        .setFooter({ text: config.brand?.footer || "S2A DEV" })
         .setTimestamp()],
       files: [file],
     }).catch(() => {});

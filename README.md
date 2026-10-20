@@ -1,4 +1,4 @@
-# D7 Dev Discord Bot
+# S2A DEV Discord Bot
 
 A Discord.js v14 store/support bot with SQLite storage. This starter project uses **manual payment confirmation**: the bot never assumes a payment is real until authorized staff confirms the order.
 

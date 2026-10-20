@@ -1,7 +1,7 @@
 {
   "name": "d7-dev-discord-bot",
   "version": "1.0.0",
-  "description": "D7 Dev Discord store, tickets, product roles, reviews, orders and analytics bot",
+  "description": "S2A DEV Discord store, tickets, product roles, reviews, orders and analytics bot",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

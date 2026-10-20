@@ -8,7 +8,7 @@ const {
   ChannelSelectMenuBuilder, ChannelType, PermissionFlagsBits, EmbedBuilder
 } = require("discord.js");
 const db = require("./db");
-const { embed, hasStaff, formatPrice, safeChannelId, cleanFileName } = require("./utils");
+const { embed, hasStaff, formatPrice, safeChannelId, cleanFileName, EMBED_COLOR } = require("./utils");
 const tickets = require("./tickets");
 const ratings = require("./ratings");
 const config = require("../config.json");
@@ -183,7 +183,7 @@ function welcomePayload() {
     .filter(x => x !== null && x !== "")
     .join("\n");
   const e = new EmbedBuilder()
-    .setColor(config.brand?.color || "#19D7CC")
+    .setColor(EMBED_COLOR)
     .setTitle(w.title || "Welcome!")
     .setDescription(body || " ")
     .setFooter({ text: w.footer || config.brand?.footer || "D7 Dev" });
@@ -244,7 +244,7 @@ function ticketsSection() {
     : "لا توجد أنواع بعد. اضغط **➕ اضافة نوع** بالأسفل.";
 
   const e = new EmbedBuilder()
-    .setColor(0x0099ff)
+    .setColor(EMBED_COLOR)
     .setTitle("🎫 نظام التذاكر")
     .setDescription([
       `**عنوان اللوحة:** ${t.panel?.title || "🎫 Support Tickets"}`,
@@ -1339,7 +1339,7 @@ client.on(Events.InteractionCreate, async interaction => {
       const emoji = interaction.fields.getTextInputValue("tk_emoji").trim();
       if (!name || !desc) return interaction.reply({ content: "❌ اسم النوع والوصف مطلوبان.", ephemeral: true });
       const t = tickets.ensureConfig();
-      const tp = { id: "c" + Date.now().toString(36), label: name, description: desc, color: 0x57F287, enabled: true };
+      const tp = { id: "c" + Date.now().toString(36), label: name, description: desc, color: EMBED_COLOR, enabled: true };
       if (emoji && /^\p{Extended_Pictographic}$/u.test(emoji)) tp.emoji = emoji;
       else if (emoji) tp.emoji = "";
       t.ticketTypes.push(tp);

@@ -10,11 +10,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const db = require("./db");
 const config = require("../config.json");
-const { embed, safeChannelId, cleanFileName } = require("./utils");
+const { embed, safeChannelId, cleanFileName, EMBED_COLOR } = require("./utils");
 const { AttachmentBuilder } = require("discord.js");
 
 const CONFIG_FILE = path.join(__dirname, "..", "config.json");
-const TICKET_COLOR = 0x0099ff; // أزرق ثابت للتذاكر
+const TICKET_COLOR = EMBED_COLOR; // أزرق ثابت للتذاكر
 
 function ensureConfig() {
   config.tickets ||= {};
@@ -140,7 +140,7 @@ async function handleSelect(interaction) {
     db.tickets.create({ channelId: channel.id, guildId: interaction.guild.id, userId: interaction.user.id, type: typeId, number });
 
     const controlEmbed = new EmbedBuilder()
-      .setColor(type.color || TICKET_COLOR)
+      .setColor(TICKET_COLOR)
       .setTitle(`${type.emoji || "🎫"} ${type.label} #${number}`)
       .setDescription(`Welcome <@${interaction.user.id}>!\nPlease describe your issue and our staff will assist you shortly.`)
       .setFooter({ text: config.brand?.footer || "D7 Dev" })
@@ -220,7 +220,7 @@ async function handleClose(interaction) {
   const ch = logChannel(guild);
   if (ch?.isTextBased()) {
     await ch.send({
-      embeds: [new EmbedBuilder().setTitle("🔒 Ticket Closed").setColor("Red").addFields(
+      embeds: [new EmbedBuilder().setTitle("🔒 Ticket Closed").setColor(TICKET_COLOR).addFields(
         { name: "المستخدم", value: `<@${ticket.user_id}>` },
         { name: "أغلقها", value: `<@${interaction.user.id}>` },
         { name: "النوع", value: ticket.type }
@@ -232,7 +232,7 @@ async function handleClose(interaction) {
   const user = await interaction.client.users.fetch(ticket.user_id).catch(() => null);
   if (user) {
     await user.send({
-      embeds: [new EmbedBuilder().setColor("Red").setTitle("🔒 Your ticket has been closed")
+      embeds: [new EmbedBuilder().setColor(TICKET_COLOR).setTitle("🔒 Your ticket has been closed")
         .setDescription(`Your ticket **#${ticket.number}** has been closed. If you need more help, feel free to open a new ticket!\nتم قفل تذكرتك **رقم ${ticket.number}**، إذا كنت بحاجة لأي مساعدة يمكنك فتح تذكرة جديدة.`)
         .setFooter({ text: config.brand?.footer || "D7 Dev" })
         .setTimestamp()],

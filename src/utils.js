@@ -1,9 +1,12 @@
 const { EmbedBuilder, PermissionsBitField } = require("discord.js");
 const config = require("../config.json");
 
+// لون واحد لكل إيمبد في البوت
+const EMBED_COLOR = 0x2fa2fa;
+
 function embed(title, description = "") {
   return new EmbedBuilder()
-    .setColor(config.brand.color || "#19D7CC")
+    .setColor(EMBED_COLOR)
     .setTitle(title)
     .setDescription(description)
     .setFooter({ text: config.brand.footer || "D7 Dev" })
@@ -30,4 +33,4 @@ function cleanFileName(value) {
   return String(value || "transcript").replace(/[^a-z0-9-_]/gi, "_").slice(0, 80);
 }
 
-module.exports = { embed, hasStaff, formatPrice, safeChannelId, cleanFileName };
+module.exports = { embed, hasStaff, formatPrice, safeChannelId, cleanFileName, EMBED_COLOR };

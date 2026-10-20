@@ -696,7 +696,7 @@ function purchaseCheckPayload(id, userId, product, status, decidedBy) {
   return {
     embeds: [embed("🛒 تأكيد شراء منتج", [
       `**العضو:** <@${userId}>`,
-      `**المنتج:** ${product?.name || "غير معروف"}${product?.name ? ` — ${formatPrice(product.price)}` : ""}`,
+      `**المنتج:** ${product?.name || "غير معروف"}${product?.name ? ` — ${formatPrice(product.price, product.currency)}` : ""}`,
       "",
       badge,
       decidedBy ? `**بواسطة:** <@${decidedBy}>` : "",
@@ -1172,20 +1172,28 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // ─────────── اختيار رومات التنبيهات والنشر ───────────
-    if (interaction.isChannelSelectMenu() && (interaction.customId.startsWith("d7_ch_") || interaction.customId === "d7_order_ch" || interaction.customId === "d7_ratings_ch")) {
+    // كل قائمة اختيار روم معرفة هنا بالكامل: المفتاح في config + القسم اللي
+    // يتعاد رسمه بعد الحفظ. أي قائمة جديدة تُضاف هنا فقط ولا تنكسر بعدين.
+    const channelPickers = {
+      "d7_ch_orders":     { key: "orders",           section: channelsSection },
+      "d7_ch_sales":      { key: "salesLogs",        section: channelsSection },
+      "d7_ch_showcase":   { key: "productShowcase",  section: channelsSection },
+      // "d7_ch_reviews" محفوظ للتوافق مع لوحات منشورة سابقاً —
+      // القائمة نفسها شلناها من قسم الرومات (صارت في قسم التقييمات فقط).
+      "d7_ch_reviews":    { key: "reviews",          section: channelsSection },
+      "d7_welcome_ch":    { key: "welcome",          section: channelsSection },
+      "d7_order_ch":      { key: "orders",           section: ordersSection },
+      "d7_ratings_ch":    { key: "reviews",          section: ratingsSection },
+      "d7_pcheck_ch":     { key: "purchaseChecks",   section: ratingsSection },
+    };
+    if (interaction.isChannelSelectMenu() && channelPickers[interaction.customId]) {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-      // ملاحظة: "d7_ch_reviews" محفوظ للتوافق مع لوحات منشورة سابقاً —
-      // القائمة نفسها شلتناها من قسم الرومات (صارت في قسم التقييمات فقط).
-      const map = { "d7_ch_orders": "orders", "d7_ch_sales": "salesLogs", "d7_ch_showcase": "productShowcase", "d7_ch_reviews": "reviews", "d7_order_ch": "orders", "d7_ratings_ch": "reviews", "d7_pcheck_ch": "purchaseChecks", "d7_welcome_ch": "welcome" };
-      const key = map[interaction.customId];
-      if (!key) return;
+      const pick = channelPickers[interaction.customId];
       config.channels ||= {};
-      config.channels[key] = interaction.values[0];
+      config.channels[pick.key] = interaction.values[0];
       saveConfig();
       // نعيد رسم نفس القسم بدل رد مؤقت — عشان يظهر الاختيار محفوظ فوراً
-      if (interaction.customId === "d7_order_ch") return interaction.update(ordersSection());
-      if (interaction.customId === "d7_ratings_ch") return interaction.update(ratingsSection());
-      return interaction.update(channelsSection());
+      return interaction.update(pick.section());
     }
 
     // ─────────── لوحة التذاكر: فتح تذكرة ───────────

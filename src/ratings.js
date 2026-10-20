@@ -29,8 +29,9 @@ function saveRatingConfig() {
 
 // ═══════════════ المنتجات ═══════════════
 function getProducts() {
-  return db.prepare("SELECT id, name, role_id FROM products ORDER BY id DESC").all()
-    .map(p => ({ id: String(p.id), name: p.name, roleId: p.role_id || "" }));
+  // price/currency يلزمون لعرض السعر في رسالة تأكيد الشراء
+  return db.prepare("SELECT id, name, role_id, price, currency FROM products ORDER BY id DESC").all()
+    .map(p => ({ id: String(p.id), name: p.name, roleId: p.role_id || "", price: p.price, currency: p.currency || "SAR" }));
 }
 
 function findProduct(_guildId, idOrName) {

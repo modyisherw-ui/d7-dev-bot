@@ -65,18 +65,18 @@ function mainPanel() {
     new ButtonBuilder().setCustomId("panel:refresh").setLabel("Refresh Dashboard").setEmoji("🔄").setStyle(ButtonStyle.Success)
   );
   const e = embed("S2A DEV • Control Center", [
-    "🛍️ **Products** — إضافة منتج والنشر في الرومات",
-    "🧾 **Orders** — الطلبات وتأكيد الدفع وروم إرسالها",
-    "🎫 **Tickets** — أنواع التذاكر ولوحة الإرسال",
-    "📌 **Channels** — رومات التنبيهات والنشر",
-    "📝 **Messages** — أخبار وقوانين وإمبدات",
-    "⭐ **Ratings** — نظام التقييمات وروم التقييمات",
-    "📊 **Analytics** — المبيعات والتقييمات",
-    "🛒 **Store Settings** — إعدادات الشراء والخاص",
-    "👋 **Welcome** — رسالة الترحيب على الخاص + الروابط والصورة",
-    "🏷️ **Auto Roles** — الرتب التلقائية",
-    "🔐 **Permissions** — مدراء البوت ورتب الإدارة",
-    "📈 **Ticket Stats** — إحصائيات التذاكر",
+    "🛍️ **Products** — add a product and publish it to channels",
+    "🧾 **Orders** — orders, payment confirmation and the log channel",
+    "🎫 **Tickets** — ticket types and the panel",
+    "📌 **Channels** — announcement and publishing channels",
+    "📝 **Messages** — news, rules and embeds",
+    "⭐ **Ratings** — the ratings system and its channel",
+    "📊 **Analytics** — sales and ratings",
+    "🛒 **Store Settings** — purchase and DM settings",
+    "👋 **Welcome** — DM greeting, links and image",
+    "🏷️ **Auto Roles** — roles granted on join",
+    "🔐 **Permissions** — bot managers and staff roles",
+    "📈 **Ticket Stats** — ticket statistics",
   ].join("\n"));
   return { embeds: [e], components: [row1, row2, row3] };
 }
@@ -91,7 +91,7 @@ function productsSection(message) {
       new ButtonBuilder().setCustomId("panel:add-product").setLabel("Add Product").setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId("panel:publish-products").setLabel("Publish Showcase").setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("panel:products-list").setLabel("Refresh List").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("panel:delete-product").setLabel("🗑️ حذف منتج").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId("panel:delete-product").setLabel("🗑️ Delete Product").setStyle(ButtonStyle.Danger)
     )],
     content: message || undefined,
   };
@@ -102,10 +102,10 @@ function productDeleteRows() {
   const products = db.prepare("SELECT * FROM products ORDER BY id DESC LIMIT 25").all();
   if (!products.length) return null;
   return [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
-    .setCustomId("d7_prod_del_sel").setPlaceholder("اختر المنتج الذي تريد حذفه نهائياً...").setMinValues(1).setMaxValues(1)
+    .setCustomId("d7_prod_del_sel").setPlaceholder("Select the product to delete permanently...").setMinValues(1).setMaxValues(1)
     .addOptions(products.map(p => new StringSelectMenuOptionBuilder()
       .setLabel(`#${p.id} — ${p.name}`.slice(0, 100))
-      .setDescription(`${formatPrice(p.price, p.currency)} — حذف نهائي`.slice(0, 100))
+      .setDescription(`${formatPrice(p.price, p.currency)} — permanent`.slice(0, 100))
       .setValue(String(p.id)))))];
 }
 
@@ -130,19 +130,19 @@ function channelRow(id, key, placeholder) {
 
 function chLabel(key) {
   const id = config.channels?.[key];
-  return safeChannelId(id) ? `<#${id}>` : "غير محدد";
+  return safeChannelId(id) ? `<#${id}>` : "Not set";
 }
 
 function channelsSection() {
   const rows = [
-    new ActionRowBuilder().addComponents(channelRow("d7_ch_orders", "orders", `🔔 روم تنبيه الطلبات — الحالي: ${chLabel("orders")}`)),
-    new ActionRowBuilder().addComponents(channelRow("d7_ch_sales", "salesLogs", `🛒 روم طلبات الشراء — الحالي: ${chLabel("salesLogs")}`)),
-    new ActionRowBuilder().addComponents(channelRow("d7_ch_showcase", "productShowcase", `🛍️ روم عرض المنتجات — الحالي: ${chLabel("productShowcase")}`)),
-    new ActionRowBuilder().addComponents(channelRow("d7_welcome_ch", "welcome", `👋 روم الترحيب (احتياطي) — الحالي: ${chLabel("welcome")}`)),
+    new ActionRowBuilder().addComponents(channelRow("d7_ch_orders", "orders", `🔔 Order log channel — current: ${chLabel("orders")}`)),
+    new ActionRowBuilder().addComponents(channelRow("d7_ch_sales", "salesLogs", `🛒 Purchase request channel — current: ${chLabel("salesLogs")}`)),
+    new ActionRowBuilder().addComponents(channelRow("d7_ch_showcase", "productShowcase", `🛍️ Showcase channel — current: ${chLabel("productShowcase")}`)),
+    new ActionRowBuilder().addComponents(channelRow("d7_welcome_ch", "welcome", `👋 Welcome channel (fallback) — current: ${chLabel("welcome")}`)),
     // ⚠️ روم التقييمات ما عاد هنا — صار في قسم التقييمات فقط حتى ما يتكرر
-    new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 القائمة الرئيسية").setStyle(ButtonStyle.Secondary)),
+    new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Back to menu").setStyle(ButtonStyle.Secondary)),
   ];
-  return { embeds: [embed("📌 الرومات", "اختر الروم المناسب من كل قائمة — يُحفظ فوراً.\nروم التقييمات تُحدَّد من قسم **⭐ Ratings**.")], components: rows };
+  return { embeds: [embed("📌 Channels", "Pick the right channel in each menu — saved instantly.\nThe ratings channel is set from **⭐ Ratings**.")], components: rows };
 }
 
 // ─────────── قسم الترحيب ───────────
@@ -209,28 +209,28 @@ function welcomeSection(statusText) {
 
   const roleSel = new RoleSelectMenuBuilder()
     .setCustomId("d7_welcome_role")
-    .setPlaceholder(w.storeRoleId ? `🛍️ رتبة المتجر — الحالية: <@&${w.storeRoleId}>` : "🛍️ رتبة Explore Our Store — غير محددة")
+    .setPlaceholder(w.storeRoleId ? `🛍️ Store role — current: <@&${w.storeRoleId}>` : "🛍️ Explore Our Store role — not set")
     .setMinValues(0)
     .setMaxValues(1);
   if (safeChannelId(w.storeRoleId)) roleSel.setDefaultRoles([w.storeRoleId]);
 
   const rows = [
     new ActionRowBuilder().addComponents(roleSel),
-    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_store", w.storeChannelId, `🏪 روم المتجر — ${w.storeChannelId ? `<#${w.storeChannelId}>` : "غير محدد"}`)),
-    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_help", w.helpChannelId, `🆘 روم الدعم (Need Help) — ${w.helpChannelId ? `<#${w.helpChannelId}>` : "غير محدد"}`)),
-    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_releases", w.releasesChannelId, `🚀 روم آخر الإصدارات — ${w.releasesChannelId ? `<#${w.releasesChannelId}>` : "غير محدد"}`)),
+    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_store", w.storeChannelId, `🏪 Store channel — ${w.storeChannelId ? `<#${w.storeChannelId}>` : "Not set"}`)),
+    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_help", w.helpChannelId, `🆘 Help channel (Need Help) — ${w.helpChannelId ? `<#${w.helpChannelId}>` : "Not set"}`)),
+    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_releases", w.releasesChannelId, `🚀 Latest Releases channel — ${w.releasesChannelId ? `<#${w.releasesChannelId}>` : "Not set"}`)),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("panel:welcome:toggle").setLabel(w.enabled === false ? "❌ الترحيب: مطفأ" : "✅ الترحيب: مفعّل").setStyle(w.enabled === false ? ButtonStyle.Danger : ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("panel:welcome:mode").setLabel(w.sendDM === false ? "🗨️ الإرسال: روم الترحيب" : "📨 الإرسال: خاص العضو").setStyle(w.sendDM === false ? ButtonStyle.Secondary : ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("panel:welcome:text").setLabel("✏️ النص والعنوان").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("panel:welcome:image").setLabel("🖼️ الصورة").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel:welcome:toggle").setLabel(w.enabled === false ? "❌ Welcome: off" : "✅ Welcome: on").setStyle(w.enabled === false ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("panel:welcome:mode").setLabel(w.sendDM === false ? "🗨️ Send: welcome channel" : "📨 Send: member DM").setStyle(w.sendDM === false ? ButtonStyle.Secondary : ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("panel:welcome:text").setLabel("✏️ Text & title").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel:welcome:image").setLabel("🖼️ Image").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
     ),
   ];
   // المعاينة = رسالة الترحيب نفسها بالضبط
   const preview = welcomePayload();
   const meta = [
-    `**روم الترحيب (احتياطي):** ${chLabel("welcome")} — لو رفض العضو فتح الخاص تنشر الرسالة هنا.`,
+    `**Welcome channel (fallback):** ${chLabel("welcome")} — used if the member keeps DMs closed.`,
   ];
   return { content: [statusText, ...meta].filter(Boolean).join("\n"), embeds: preview.embeds, components: rows };
 }
@@ -241,23 +241,23 @@ function ticketsSection() {
   const all = tickets.types();
   const on = all.filter(x => x.enabled !== false);
   const lines = all.length
-    ? all.map(tp => `${tp.enabled === false ? "❌" : "✅"} ${tp.emoji || ""} **${tp.label}** — ${tp.description}${String(tp.id || "").startsWith("c") ? " *(مخصص)*" : ""}`).join("\n")
-    : "لا توجد أنواع بعد. اضغط **➕ اضافة نوع** بالأسفل.";
+    ? all.map(tp => `${tp.enabled === false ? "❌" : "✅"} ${tp.emoji || ""} **${tp.label}** — ${tp.description}${String(tp.id || "").startsWith("c") ? " *(custom)*" : ""}`).join("\n")
+    : "No types yet. Press **➕ Add Type** below.";
 
   const e = new EmbedBuilder()
     .setColor(EMBED_COLOR)
     .setThumbnail(EMBED_THUMB)
-    .setTitle("🎫 نظام التذاكر")
+    .setTitle("🎫 Ticket System")
     .setDescription([
-      `**عنوان اللوحة:** ${t.panel?.title || "🎫 Support Tickets"}`,
-      `**الحالة:** ${on.length} نوع مفعّل من ${all.length || 0}`,
+      `**Panel title:** ${t.panel?.title || "🎫 Support Tickets"}`,
+      `**Status:** ${on.length} of ${all.length || 0} types enabled`,
       "",
-      "**الأنواع:**",
+      "**Types:**",
       lines,
       "",
-      `**الكاتيجوري:** ${safeChannelId(t.categoryId) ? `<#${t.categoryId}>` : "غير محدد"}`,
-      `**روم اللوق:** ${safeChannelId(t.logChannelId) ? `<#${t.logChannelId}>` : "غير محدد"}`,
-      `**رتب الدعم:** ${(t.staffRoles || []).length ? t.staffRoles.map(r => `<@&${r}>`).join(" ") : "غير محددة"}`,
+      `**Category:** ${safeChannelId(t.categoryId) ? `<#${t.categoryId}>` : "Not set"}`,
+      `**Log channel:** ${safeChannelId(t.logChannelId) ? `<#${t.logChannelId}>` : "Not set"}`,
+      `**Support roles:** ${(t.staffRoles || []).length ? t.staffRoles.map(r => `<@&${r}>`).join(" ") : "None"}`,
     ].join("\n"))
     .setFooter({ text: config.brand?.footer || "S2A DEV" })
     .setTimestamp();
@@ -275,23 +275,23 @@ function ticketsSection() {
     })));
   }
   rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("d7_tk_add").setLabel("➕ اضافة نوع").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("d7_tk_del").setLabel("🗑️ حذف نوع").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId("panel:publish-tickets").setLabel("⬆️ ارسال رسالة التذاكر").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("d7_tk_text").setLabel("✏️ نص اللوحة").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 رجوع للرئيسية").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("d7_tk_add").setLabel("➕ Add Type").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("d7_tk_del").setLabel("🗑️ Delete Type").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId("panel:publish-tickets").setLabel("⬆️ Send Ticket Panel").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("d7_tk_text").setLabel("✏️ Panel Text").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Back to Home").setStyle(ButtonStyle.Secondary),
   ));
 
   const category = new ChannelSelectMenuBuilder().setCustomId("d7_tk_category")
-    .setPlaceholder(`📁 الكاتيجوري — الحالي: ${safeChannelId(t.categoryId) ? `<#${t.categoryId}>` : "غير محدد"}`)
+    .setPlaceholder(`📁 Category — current: ${safeChannelId(t.categoryId) ? `<#${t.categoryId}>` : "Not set"}`)
     .addChannelTypes(ChannelType.GuildCategory).setMinValues(1).setMaxValues(1);
   if (safeChannelId(t.categoryId)) category.setDefaultChannels([t.categoryId]);
   const log = new ChannelSelectMenuBuilder().setCustomId("d7_tk_log")
-    .setPlaceholder(`📋 روم اللوق — الحالي: ${safeChannelId(t.logChannelId) ? `<#${t.logChannelId}>` : "غير محدد"}`)
+    .setPlaceholder(`📋 Log channel — current: ${safeChannelId(t.logChannelId) ? `<#${t.logChannelId}>` : "Not set"}`)
     .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1);
   if (safeChannelId(t.logChannelId)) log.setDefaultChannels([t.logChannelId]);
   const staff = new RoleSelectMenuBuilder().setCustomId("d7_tk_staff")
-    .setPlaceholder(`👮 رتب الدعم — الحالي: ${(t.staffRoles || []).length} رتبة`)
+    .setPlaceholder(`👮 Support roles — current: ${(t.staffRoles || []).length} selected`)
     .setMinValues(0).setMaxValues(10);
   if ((t.staffRoles || []).length) staff.setDefaultRoles(t.staffRoles);
 
@@ -309,7 +309,7 @@ function ticketDeleteRows() {
   if (custom.length) {
     rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
       .setCustomId("d7_tk_del_sel")
-      .setPlaceholder("اختر النوع المخصص الذي تريد حذفه...")
+      .setPlaceholder("Select the custom type to delete...")
       .addOptions(custom.map(tp => {
         const opt = new StringSelectMenuOptionBuilder().setLabel(tp.label).setDescription(tp.description).setValue(tp.id);
         if (tp.emoji && /^\p{Extended_Pictographic}$/u.test(tp.emoji.trim())) opt.setEmoji(tp.emoji.trim());
@@ -317,7 +317,7 @@ function ticketDeleteRows() {
       }))));
   }
   rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("d7_tk_del_back").setLabel("🔙 رجوع").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("d7_tk_del_back").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
   ));
   return rows;
 }
@@ -326,13 +326,13 @@ function ticketDeleteRows() {
 function ordersSection() {
   const rowsData = db.prepare(`SELECT o.*,p.name product_name,p.price,p.currency FROM orders o JOIN products p ON p.id=o.product_id ORDER BY o.id DESC LIMIT 10`).all();
   const desc = rowsData.length
-    ? rowsData.map(o => `**#${o.id}** · ${o.product_name} · <@${o.user_id}> · **${o.status}** · ${formatPrice(o.price,o.currency)}\n⭐ ${o.rating ? `${o.rating}/5` : "بدون تقييم"}`).join("\n")
+    ? rowsData.map(o => `**#${o.id}** · ${o.product_name} · <@${o.user_id}> · **${o.status}** · ${formatPrice(o.price,o.currency)}\n⭐ ${o.rating ? `${o.rating}/5` : "no rating"}`).join("\n")
     : "No orders yet.";
   const pending = db.prepare(`SELECT o.id,o.user_id,p.name product_name,p.price,p.currency FROM orders o JOIN products p ON p.id=o.product_id WHERE o.status='pending' ORDER BY o.id DESC LIMIT 20`).all();
   const rows = [];
   if (pending.length) {
     rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
-      .setCustomId("d7_order_confirm").setPlaceholder("✅ اختر طلب لتأكيد الدفع وإعطائه الرتبة").setMinValues(1).setMaxValues(1)
+      .setCustomId("d7_order_confirm").setPlaceholder("✅ Pick an order to confirm payment and grant the role").setMinValues(1).setMaxValues(1)
       .addOptions(pending.map(o => new StringSelectMenuOptionBuilder()
         .setLabel(`#${o.id} — ${o.product_name}`.slice(0, 100))
         .setDescription(`${o.user_id} • ${formatPrice(o.price,o.currency)}`.slice(0, 100))
@@ -341,24 +341,24 @@ function ordersSection() {
   // ⬇️ سجل الطلبات: كل طلب وكل تغيير حالة ينزل برسالته الخاصة
   // ملاحظة: الـ placeholder يظهر فقط لما ما يكون فيه روم محفوظ —
   // ولو كان محفوظاً يظهر اسمه داخل القائمة مكانها، عشان كذا نذكره في نص الرسالة.
-  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_ch", "orders", "📋 اختر روم سجل الطلبات")));
+  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_ch", "orders", "📋 Pick the order log channel")));
   // ⬇️ روم حالة المنتجات: /product-edit ينزل فيه رسالة لكل تغيير حالة
   // (بلا روم محفوظ يظهر الـ placeholder، عشان يبان من أول مرة)
-  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_prod_status_ch", "productStatus", "🔄 اختر روم حالة المنتجات")));
+  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_prod_status_ch", "productStatus", "🔄 Pick the product status channel")));
   rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("panel:orders").setLabel("🔄 تحديث").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId("panel:orders").setLabel("🔄 Refresh").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary)
   ));
   // ديسكورد يخفي تسمية القائمة ما إن تحفظ قيمة داخلها ويعرض اسم الروم مكانها،
   // فتصير القائمتين متشابهتين تماماً ولا يعرف أحد أي واحدة لأي غرض.
   // عشان كذا نكتب الروم باسمه في نص الرسالة فوق القائمتين — هذا حصل فعلاً:
   // المستخدم ضبط روم حالة المنتجات وظن أن الطلبات ستصله.
-  return { embeds: [embed("🧾 الطلبات", [
+  return { embeds: [embed("🧾 Orders", [
     desc,
     "",
-    "أكّد الدفع من القائمة بالأعلى، والعميل ياخذ رتبة المنتج تلقائياً.",
-    `**📋 سجل الطلبات: ${chLabel("orders")}** — القائمة أسفل الرسالة هي التي تحدده. كل تأكيد أو تسليم أو إلغاء ينزل فيه رسالة جديدة بحالة الطلب.`,
-    `**🔄 روم حالة المنتجات: ${chLabel("productStatus")}** — القائمة أسفل الرسالة هي التي تحدده. كل تغيير حالة منتج تنزل فيه رسالة.`,
+    "Confirm payment from the menu above; the customer is granted the product role automatically.",
+    `**📋 Order log: ${chLabel("orders")}** — set by the menu below. Every confirmation, delivery or cancellation posts a new message with the order status.`,
+    `**🔄 Product status: ${chLabel("productStatus")}** — set by the menu below. Every product status change posts a message.`,
   ].join("\n"))], components: rows.slice(0, 5) };
 }
 
@@ -368,25 +368,25 @@ function ratingsSection() {
   const list = products.length
     ? products.map(p => {
         const r = db.ratings.byProduct(p.id);
-        return `**#${p.id} — ${p.name}** — ${r.n ? `${Number(r.avg).toFixed(1)}/5 (${r.n} تقييم)` : "بدون تقييم"}`;
+        return `**#${p.id} — ${p.name}** — ${r.n ? `${Number(r.avg).toFixed(1)}/5 (${r.n} ratings)` : "Not rated"}`;
       }).join("\n")
     : "No products yet.";
   const rows = [
-    new ActionRowBuilder().addComponents(channelRow("d7_pcheck_ch", "purchaseChecks", `🛒 روم تأكيد الشراء — الحالي: ${chLabel("purchaseChecks")}`)),
-    new ActionRowBuilder().addComponents(channelRow("d7_ratings_ch", "reviews", `⭐ روم التقييمات — الحالي: ${chLabel("reviews")}`)),
+    new ActionRowBuilder().addComponents(channelRow("d7_pcheck_ch", "purchaseChecks", `🛒 Purchase check channel — current: ${chLabel("purchaseChecks")}`)),
+    new ActionRowBuilder().addComponents(channelRow("d7_ratings_ch", "reviews", `⭐ Ratings channel — current: ${chLabel("reviews")}`)),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("d7_rate_send").setLabel("⭐ إرسال تقييم لعميل").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("panel:ratings").setLabel("🔄 تحديث").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("d7_rate_send").setLabel("⭐ Send Rating to Customer").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("panel:ratings").setLabel("🔄 Refresh").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
     ),
   ];
-  return { embeds: [embed("⭐ نظام التقييمات", [
+  return { embeds: [embed("⭐ Ratings System", [
     `${list}`,
     "",
-    `**روم تأكيد الشراء:** ${safeChannelId(config.channels?.purchaseChecks) ? `<#${config.channels.purchaseChecks}>` : "غير محدد — تُرسل رسالة التقييم مباشرة بدون تأكيد."}`,
-    "أي عضو ياخذ رتبة منتج يجيه طلب تأكيد في الروم المحدد: تأكيد يرسل التقييم، ورفض ما يوصله شي.",
+    `**Purchase check channel:** ${safeChannelId(config.channels?.purchaseChecks) ? `<#${config.channels.purchaseChecks}>` : "Not set — the rating DM is sent with no confirmation step."}`,
+    "Any member who receives a product role gets a check in that channel: confirming sends the rating DM, rejecting sends nothing.",
     "",
-    `**روم التقييمات:** ${chLabel("reviews")} — التقييمات تُنشر فيه.`,
+    `**Ratings channel:** ${chLabel("reviews")} — ratings are posted here.`,
   ].join("\n"))], components: rows };
 }
 
@@ -396,20 +396,20 @@ function storeSection() {
   const btn = (id, label, on) => new ButtonBuilder().setCustomId(id).setLabel(`${on ? "✅" : "❌"} ${label}`).setStyle(on ? ButtonStyle.Success : ButtonStyle.Secondary);
   const rows = [
     new ActionRowBuilder().addComponents(
-      btn("panel:store:manual", "تأكيد الدفع يدوياً", p.manualConfirmation !== false),
-      btn("panel:store:thankyou", "رسالة شكر خاصة", p.sendThankYouDM === true),
-      btn("panel:store:reviewdm", "رسالة تقييم خاصة", p.sendProductReviewDM === true),
+      btn("panel:store:manual", "Manual payment confirmation", p.manualConfirmation !== false),
+      btn("panel:store:thankyou", "Thank-you DM", p.sendThankYouDM === true),
+      btn("panel:store:reviewdm", "Rating DM", p.sendProductReviewDM === true),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
     ),
   ];
-  return { embeds: [embed("🛒 إعدادات المتجر", [
-    `**تأكيد الدفع اليدوي:** ${p.manualConfirmation !== false ? "✅ مفعّل" : "❌ معطّل"} — الطلبات تحتاج موافقة موظف قبل إعطاء الرتبة.`,
-    `**رسالة الشكر:** ${p.sendThankYouDM === true ? "✅ مفعّل" : "❌ معطّل"} — رسالة خاصة بعد تأكيد الطلب.`,
-    `**رسالة التقييم:** ${p.sendProductReviewDM === true ? "✅ مفعّل" : "❌ معطّل"} — تصل تلقائياً للعضو بأي رتبة منتج ياخذها.`,
+  return { embeds: [embed("🛒 Store Settings", [
+    `**Manual payment confirmation:** ${p.manualConfirmation !== false ? "✅ On" : "❌ Off"} — orders need staff approval before the role is granted.`,
+    `**Thank-you message:** ${p.sendThankYouDM === true ? "✅ On" : "❌ Off"} — a DM sent once the order is confirmed.`,
+    `**Rating message:** ${p.sendProductReviewDM === true ? "✅ On" : "❌ Off"} — sent automatically to whoever takes any product role.`,
     "",
-    "اضغط على الزر لتبديل الحالة.",
+    "Press a button to toggle it.",
   ].join("\n"))], components: rows };
 }
 
@@ -419,22 +419,22 @@ function permsSection() {
   const staffRoles = (config.roles?.staff || []).filter(Boolean);
   const adminRole = config.roles?.admin || [];
   const roleSelect = new RoleSelectMenuBuilder().setCustomId("d7_perm_staff")
-    .setPlaceholder(`👮 رتب الإدارة/الموظفين — الحالي: ${staffRoles.length} رتبة`)
+    .setPlaceholder(`👮 Admin/staff roles — current: ${staffRoles.length} selected`)
     .setMinValues(0).setMaxValues(10);
   if (staffRoles.length) roleSelect.setDefaultRoles(staffRoles);
   const rows = [
     new ActionRowBuilder().addComponents(roleSelect),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("d7_perm_admins").setLabel("🔑 مدراء البوت").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("d7_perm_admins").setLabel("🔑 Bot Managers").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
     ),
   ];
-  return { embeds: [embed("🔐 الصلاحيات", [
-    `**مدراء البوت:** ${admins.length ? admins.map(id => `<@${id}>`).join(" ") : "غير محددين"}`,
-    `**رتب الإدارة:** ${adminRole.length ? adminRole.map(id => `<@&${id}>`).join(" ") : "غير محددة"}`,
-    `**رتب الموظفين:** ${staffRoles.length ? staffRoles.map(id => `<@&${id}>`).join(" ") : "غير محددة"}`,
+  return { embeds: [embed("🔐 Permissions", [
+    `**Bot managers:** ${admins.length ? admins.map(id => `<@${id}>`).join(" ") : "None"}`,
+    `**Admin roles:** ${adminRole.length ? adminRole.map(id => `<@&${id}>`).join(" ") : "None"}`,
+    `**Staff roles:** ${staffRoles.length ? staffRoles.map(id => `<@&${id}>`).join(" ") : "None"}`,
     "",
-    "من يستطيع استخدام أوامر اللوحة.",
+    "Who is allowed to use the panel commands.",
   ].join("\n"))], components: rows };
 }
 
@@ -442,22 +442,22 @@ function permsSection() {
 function ticketStatsSection() {
   const s = db.tickets.stats(null);
   const rows = db.prepare(`SELECT type, COUNT(*) c FROM tickets GROUP BY type ORDER BY c DESC`).all();
-  const byType = rows.length ? rows.map(r => `**${r.type}** — ${r.c}`).join("\n") : "لا توجد تذاكر بعد.";
+  const byType = rows.length ? rows.map(r => `**${r.type}** — ${r.c}`).join("\n") : "No tickets yet.";
   const open = db.prepare(`SELECT number,user_id,type,created_at FROM tickets WHERE status='open' ORDER BY created_at DESC LIMIT 10`).all();
-  const openList = open.length ? open.map(t => `**#${t.number}** · ${t.type} · <@${t.user_id}>`).join("\n") : "لا توجد تذاكر مفتوحة.";
+  const openList = open.length ? open.map(t => `**#${t.number}** · ${t.type} · <@${t.user_id}>`).join("\n") : "No open tickets.";
   return {
-    embeds: [embed("📈 إحصائيات التذاكر", [
-      `**الكل:** ${s.total} · **مفتوحة:** ${s.open} · **مغلقة:** ${s.closed} · **اليوم:** ${s.today}`,
+    embeds: [embed("📈 Ticket Statistics", [
+      `**Total:** ${s.total} · **Open:** ${s.open} · **Closed:** ${s.closed} · **Today:** ${s.today}`,
       "",
-      "**حسب النوع:**",
+      "**By type:**",
       byType,
       "",
-      "**مفتوحة الآن:**",
+      "**Currently open:**",
       openList,
     ].join("\n"))],
     components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("panel:ticket-stats").setLabel("🔄 تحديث").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel:ticket-stats").setLabel("🔄 Refresh").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
     )],
   };
 }
@@ -468,28 +468,28 @@ function autorolesSection(statusText) {
   config.autoRoles ||= { enabled: false, memberRoleId: "", botRoleId: "" };
   const a = config.autoRoles;
   const memberSel = new RoleSelectMenuBuilder().setCustomId("autorole_select:member")
-    .setPlaceholder(a.memberRoleId ? `👤 رتبة الأعضاء — الحالية: <@&${a.memberRoleId}>` : "👤 رتبة الأعضاء — غير محددة")
+    .setPlaceholder(a.memberRoleId ? `👤 Member role — current: <@&${a.memberRoleId}>` : "👤 Member role — not set")
     .setMinValues(0).setMaxValues(1);
   if (a.memberRoleId) memberSel.setDefaultRoles([a.memberRoleId]);
   const botSel = new RoleSelectMenuBuilder().setCustomId("autorole_select:bot")
-    .setPlaceholder(a.botRoleId ? `🤖 رتبة البوتات — الحالية: <@&${a.botRoleId}>` : "🤖 رتبة البوتات — غير محددة")
+    .setPlaceholder(a.botRoleId ? `🤖 Bot role — current: <@&${a.botRoleId}>` : "🤖 Bot role — not set")
     .setMinValues(0).setMaxValues(1);
   if (a.botRoleId) botSel.setDefaultRoles([a.botRoleId]);
   const rows = [
     new ActionRowBuilder().addComponents(memberSel),
     new ActionRowBuilder().addComponents(botSel),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("panel:autoroles-toggle").setLabel(`${a.enabled ? "✅" : "❌"} ${a.enabled ? "إيقاف الرتب التلقائية" : "تفعيل الرتب التلقائية"}`).setStyle(a.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel:autoroles-toggle").setLabel(`${a.enabled ? "✅" : "❌"} ${a.enabled ? "Disable Auto Roles" : "Enable Auto Roles"}`).setStyle(a.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
     ),
   ];
-  return { embeds: [embed("🏷️ الرتب التلقائية", [
-    `**الحالة:** ${a.enabled ? "✅ مفعّل" : "❌ معطّل"}`,
-    `**رتبة الأعضاء:** ${a.memberRoleId ? `<@&${a.memberRoleId}>` : "غير محددة"}`,
-    `**رتبة البوتات:** ${a.botRoleId ? `<@&${a.botRoleId}>` : "غير محددة"}`,
+  return { embeds: [embed("🏷️ Auto Roles", [
+    `**Status:** ${a.enabled ? "✅ On" : "❌ Off"}`,
+    `**Member role:** ${a.memberRoleId ? `<@&${a.memberRoleId}>` : "Not set"}`,
+    `**Bot role:** ${a.botRoleId ? `<@&${a.botRoleId}>` : "Not set"}`,
     "",
-    "اختر الرتب من القوائم بالأسفل — تُحفظ فوراً.",
-    "البوت يحتاج صلاحية **إدارة الرتب**، ورتبته تكون فوق الرتب المختارة.",
+    "Pick roles from the menus below — saved instantly.",
+    "The bot needs **Manage Roles**, and its own role must sit above the ones it assigns.",
   ].join("\n") + (statusText ? `\n\n${statusText}` : ""))], components: rows };
 }
 
@@ -539,26 +539,26 @@ async function refreshAdminDashboard(guild) {
 // روم الطلبات يجيب حالة الطلب، وكل تغيير حالة ينزل برسالته الخاصة
 // (مو تعديل الرسالة السابقة، ومو لستة مجمّعة) عشان يظل الأرشيف واضح.
 const ORDER_STATUS = {
-  pending:   { label: "بانتظار التأكيد", emoji: "⏳" },
-  confirmed: { label: "قيد التنفيذ",     emoji: "🚚" },
-  delivered: { label: "تم التنفيذ",      emoji: "✅" },
-  cancelled: { label: "ملغى",            emoji: "❌" },
+  pending:   { label: "Pending",     emoji: "⏳" },
+  confirmed: { label: "In progress", emoji: "🚚" },
+  delivered: { label: "Completed",   emoji: "✅" },
+  cancelled: { label: "Cancelled",   emoji: "❌" },
 };
 
 // order لازم يجي معه name / role_id / price / currency / user_id / status
 function orderFeedEmbed(order, extra = {}) {
-  const st = ORDER_STATUS[order.status] || { label: order.status || "غير معروفة", emoji: "ℹ️" };
-  // لو ما قيّم المنتج نقولها صراحةً بدل ما تظهر خانة فاضية
-  const rating = order.rating ? `⭐ ${order.rating}/5` : "لم يتم التقييم";
-  return embed(`🛒 ${st.emoji} ${st.label} — طلب #${order.id}`, [
-    `**اسم المنتج:** ${order.name}`,
-    `**الرتبة:** ${order.role_id ? `<@&${order.role_id}>` : "بدون رتبة"}`,
-    `**السعر:** ${formatPrice(order.price, order.currency)}`,
-    `**حالة الطلب:** ${st.emoji} ${st.label}`,
-    `**المشتري:** <@${order.user_id}>`,
-    `**التقييم:** ${rating}`,
-    order.confirmed_by ? `**أكده:** <@${order.confirmed_by}>` : "",
-    extra.note ? `**ملاحظة:** ${extra.note}` : "",
+  const st = ORDER_STATUS[order.status] || { label: order.status || "Unknown", emoji: "ℹ️" };
+  const rating = order.rating ? `⭐ ${order.rating}/5` : "Not rated";
+  // رتبة المنتج بدل اسمه: الرتبة هي ما يحمله المشتري فعلاً، والاسم يتكرر معها
+  // وحالة الطلب آخر سطر — آخر ما يقع عليه النظر بعد بقية التفاصيل
+  return embed(`🛒 Order #${order.id}`, [
+    `**Role:** ${order.role_id ? `<@&${order.role_id}>` : "No role"}`,
+    `**Buyer:** <@${order.user_id}>`,
+    `**Price:** ${formatPrice(order.price, order.currency)}`,
+    `**Rating:** ${rating}`,
+    order.confirmed_by ? `**Admin:** <@${order.confirmed_by}>` : "",
+    extra.note ? `**Note:** ${extra.note}` : "",
+    `**Order status:** ${st.emoji} ${st.label}`,
   ].filter(Boolean).join("\n"));
 }
 
@@ -576,13 +576,13 @@ async function postOrderFeed(guild, order, extra) {
 // المسار الأول: زر شراء (ينشئ طلباً). المسار الثاني: منح رتبة يدوياً ثم موافقة
 // الموظف (ما يخلق طلباً) — لذلك لا نذكر رقماً غير موجود في الثاني.
 function purchaseFeedEmbed(product, buyerId, opts = {}) {
-  return embed("🛒 شراء جديد", [
-    `**المنتج:** ${product.name}`,
-    `**المشتري:** <@${buyerId}>`,
-    `**السعر:** ${formatPrice(product.price, product.currency)}`,
-    opts.orderId ? `**الطلب:** #${opts.orderId}` : "",
-    opts.approvedBy ? `**أكده:** <@${opts.approvedBy}>` : "",
-    opts.note ? `**ملاحظة:** ${opts.note}` : "",
+  return embed("🛒 New purchase", [
+    `**Product:** ${product.name}`,
+    `**Buyer:** <@${buyerId}>`,
+    `**Price:** ${formatPrice(product.price, product.currency)}`,
+    opts.orderId ? `**Order:** #${opts.orderId}` : "",
+    opts.approvedBy ? `**Admin:** <@${opts.approvedBy}>` : "",
+    opts.note ? `**Note:** ${opts.note}` : "",
   ].filter(Boolean).join("\n"));
 }
 
@@ -593,21 +593,21 @@ async function postPurchaseFeed(guild, product, buyerId, opts) {
 
 // ─────────── روم حالة المنتجات (داخل قسم الطلبات) ───────────
 const PRODUCT_STATUS = {
-  working:     { label: "يعمل",         emoji: "✅" },
-  maintenance: { label: "تحت الصيانة", emoji: "🛠️" },
-  stopped:     { label: "متوقف",        emoji: "⛔" },
+  working:     { label: "Working",             emoji: "✅" },
+  maintenance: { label: "Under maintenance", emoji: "🛠️" },
+  stopped:     { label: "Stopped",            emoji: "⛔" },
 };
 
 // رسالة واحدة لكل تغيير حالة، ولا تنزل لو الحالة رجعت نفس ما كانت
 function productStatusEmbed(product, from, to, by) {
-  const t = PRODUCT_STATUS[to] || { label: to || "غير معروفة", emoji: "ℹ️" };
-  const f = PRODUCT_STATUS[from] || { label: from || "غير معروفة", emoji: "ℹ️" };
+  const t = PRODUCT_STATUS[to] || { label: to || "Unknown", emoji: "ℹ️" };
+  const f = PRODUCT_STATUS[from] || { label: from || "Unknown", emoji: "ℹ️" };
   return embed(`${t.emoji} ${t.label} — ${product.name}`, [
-    `**المنتج:** #${product.id} ${product.name}`,
-    `**الحالة:** ${t.emoji} ${t.label}`,
-    from && from !== to ? `**السابقة:** ${f.emoji} ${f.label}` : "",
-    `**السعر:** ${formatPrice(product.price, product.currency)}`,
-    `**غيّره:** ${by}`,
+    `**Product:** #${product.id} ${product.name}`,
+    `**Status:** ${t.emoji} ${t.label}`,
+    from && from !== to ? `**Previous:** ${f.emoji} ${f.label}` : "",
+    `**Price:** ${formatPrice(product.price, product.currency)}`,
+    `**Changed by:** ${by}`,
   ].filter(Boolean).join("\n"));
 }
 
@@ -619,11 +619,11 @@ async function postProductStatus(guild, product, from, to, by) {
 // ─────────── تأكيد طلب: يعطي الرول وينبّه روم الطلبات ───────────
 async function confirmOrder(interaction, id) {
   const order = db.prepare("SELECT o.*, p.name, p.role_id, p.price, p.currency FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=?").get(id);
-  if (!order) return interaction.reply({ content: "الطلب غير موجود.", ephemeral: true });
-  if (order.status !== "pending") return interaction.reply({ content: `هذا الطلب حالته **${order.status}** بالفعل.`, ephemeral: true });
+  if (!order) return interaction.reply({ content: "Order not found.", ephemeral: true });
+  if (order.status !== "pending") return interaction.reply({ content: `This order is already **${order.status}**.`, ephemeral: true });
   const guild = interaction.guild;
   const member = await guild.members.fetch(order.user_id).catch(() => null);
-  if (!member) return interaction.reply({ content: "العميل مو عضو في هذا السيرفر.", ephemeral: true });
+  if (!member) return interaction.reply({ content: "The buyer is not a member of this server.", ephemeral: true });
   if (order.role_id) {
     // تأكيد الدفع من الموظف نفسه → ما نطلب تأكيداً ثانياً قبل رسالة التقييم
     preApprove(order.user_id, order.product_id);
@@ -639,37 +639,37 @@ async function confirmOrder(interaction, id) {
   // سجل الطلبات: رسالة جديدة للطلب تبيّن اسم المنتج ورتبته وسعره وحالته ومشتريه وتقييمه
   await postOrderFeed(guild, order);
   await refreshAdminDashboard(guild);
-  return interaction.reply({ content: `✅ تم تأكيد الطلب #${id} وأعطيت ${member} رول **${order.name}**.`, ephemeral: true });
+  return interaction.reply({ content: `✅ Confirmed order #${id} and granted ${member} the **${order.name}** role.`, ephemeral: true });
 }
 
 // ─────────── إضافة منتج: الرتبة ← السعر ← الاسم ───────────
 function productRoleStep() {
   return {
-    embeds: [embed("🛍️ إضافة منتج", "**اختار الرتبة**\nالرتبة تُعطى للعميل بعد تأكيد الدفع.")],
+    embeds: [embed("🛍️ Add Product", "**Pick a role**\nThe role is granted to the customer once payment is confirmed.")],
     components: [
       new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder()
-        .setCustomId("d7_prod_role").setPlaceholder("اختار الرتبة").setMinValues(1).setMaxValues(1)),
+        .setCustomId("d7_prod_role").setPlaceholder("Pick a role").setMinValues(1).setMaxValues(1)),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("d7_prod_role_skip").setLabel("بدون رتبة").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("d7_prod_role_cancel").setLabel("إلغاء").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId("d7_prod_role_skip").setLabel("No role").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("d7_prod_role_cancel").setLabel("Cancel").setStyle(ButtonStyle.Danger)
       ),
     ],
   };
 }
 
 function productPriceModal() {
-  const modal = new ModalBuilder().setCustomId("panel_modal:add-price").setTitle("حط السعر");
+  const modal = new ModalBuilder().setCustomId("panel_modal:add-price").setTitle("Set the price");
   modal.addComponents(new ActionRowBuilder().addComponents(
-    new TextInputBuilder().setCustomId("price").setLabel("حط السعر").setPlaceholder("مثال: 150 أو 150.50")
+    new TextInputBuilder().setCustomId("price").setLabel("Price").setPlaceholder("e.g. 150 or 150.50")
       .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(20)
   ));
   return modal;
 }
 
 function productNameModal() {
-  const modal = new ModalBuilder().setCustomId("panel_modal:add-name").setTitle("اسم المنتج");
+  const modal = new ModalBuilder().setCustomId("panel_modal:add-name").setTitle("Product name");
   modal.addComponents(new ActionRowBuilder().addComponents(
-    new TextInputBuilder().setCustomId("name").setLabel("اسم المنتج").setPlaceholder("مثال: Dev Pack")
+    new TextInputBuilder().setCustomId("name").setLabel("Product name").setPlaceholder("e.g. Dev Pack")
       .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)
   ));
   return modal;
@@ -678,7 +678,7 @@ function productNameModal() {
 // بعد اختيار الرتبة → نافذة السعر (أو الاسم مباشرة لو السعر معطوف في الأمر)
 function productAfterRole(interaction) {
   const pending = pendingProduct.get(interaction.user.id);
-  if (!pending) return interaction.reply({ content: "انتهت مهلة إضافة المنتج. أعد الأمر /product-add.", ephemeral: true });
+  if (!pending) return interaction.reply({ content: "The product step timed out. Run /product-add again.", ephemeral: true });
   if (pending.price === null) return interaction.showModal(productPriceModal());
   if (pending.name === null) return interaction.showModal(productNameModal());
   return finishProduct(interaction);
@@ -686,10 +686,10 @@ function productAfterRole(interaction) {
 
 function productNameStep() {
   return {
-    content: "✅ تم حفظ السعر. الآن اضغط لإدخال اسم المنتج:",
+    content: "✅ Price saved. Press below to enter the product name:",
     embeds: [],
     components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("d7_prod_name_step").setLabel("📝 اسم المنتج").setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId("d7_prod_name_step").setLabel("📝 Product name").setStyle(ButtonStyle.Primary)
     )],
   };
 }
@@ -702,14 +702,14 @@ function startProductFlow(interaction, { name = null, price = null, ephemeral = 
 // ─────────── حفظ المنتج بعد اكتمال الخطوات ───────────
 async function finishProduct(interaction) {
   const pending = pendingProduct.get(interaction.user.id);
-  if (!pending) return interaction.reply({ content: "انتهت مهلة إضافة المنتج. أعد الأمر /product-add.", ephemeral: true });
+  if (!pending) return interaction.reply({ content: "The product step timed out. Run /product-add again.", ephemeral: true });
   pendingProduct.delete(interaction.user.id);
   const name = String(pending.name || "").trim();
   const price = Number(pending.price);
-  if (!name) return interaction.reply({ content: "❌ اسم المنتج مطلوب.", ephemeral: true });
-  if (!Number.isFinite(price) || price < 0) return interaction.reply({ content: "السعر لازم يكون رقم صحيح، مثال: 150 أو 150.50", ephemeral: true });
+  if (!name) return interaction.reply({ content: "❌ A product name is required.", ephemeral: true });
+  if (!Number.isFinite(price) || price < 0) return interaction.reply({ content: "The price must be a number, e.g. 150 or 150.50", ephemeral: true });
   const res = db.prepare("INSERT INTO products (name,price,role_id) VALUES (?,?,?)").run(name, price, pending.roleId || "");
-  const message = `✅ أُضيف المنتج **${name}** برقم \`#${res.lastInsertRowid}\` — ${formatPrice(price)}${pending.roleId ? `\nالرتبة: <@&${pending.roleId}>` : "\nبدون رتبة"}`;
+  const message = `✅ Added product **${name}** as \`#${res.lastInsertRowid}\` — ${formatPrice(price)}${pending.roleId ? `\nRole: <@&${pending.roleId}>` : "\nNo role"}`;
   return respondWith(interaction, { ...productsSection(), content: message });
 }
 
@@ -776,22 +776,22 @@ async function requestPurchaseCheck(member, product) {
 
 // حمولة رسالة التأكيد — تُستخدم عند الإنشاء وعند تحديث الحالة
 function purchaseCheckPayload(id, userId, product, status, decidedBy) {
-  const badge = status === "approved" ? "✅ **تم التأكيد** — أُرسلت رسالة التقييم."
-    : status === "rejected" ? "❌ **تم الرفض** — لم تُرسل أي رسالة."
-    : "⏳ **بانتظار التأكيد** — هل هذا العضو اشترى المنتج فعلاً؟";
+  const badge = status === "approved" ? "✅ **Confirmed** — the rating DM was sent."
+    : status === "rejected" ? "❌ **Rejected** — nothing was sent."
+    : "⏳ **Awaiting confirmation** — did this member really buy the product?";
   const rows = status === "pending"
     ? [new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`d7_pcheck:${id}:ok`).setLabel("✅ تأكيد").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`d7_pcheck:${id}:no`).setLabel("❌ رفض").setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`d7_pcheck:${id}:ok`).setLabel("✅ Confirm").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`d7_pcheck:${id}:no`).setLabel("❌ Reject").setStyle(ButtonStyle.Danger),
       )]
     : [];
   return {
-    embeds: [embed("🛒 تأكيد شراء منتج", [
-      `**العضو:** <@${userId}>`,
-      `**المنتج:** ${product?.name || "غير معروف"}${product?.name ? ` — ${formatPrice(product.price, product.currency)}` : ""}`,
+    embeds: [embed("🛒 Product Purchase Check", [
+      `**Member:** <@${userId}>`,
+      `**Product:** ${product?.name || "Unknown"}${product?.name ? ` — ${formatPrice(product.price, product.currency)}` : ""}`,
       "",
       badge,
-      decidedBy ? `**بواسطة:** <@${decidedBy}>` : "",
+      decidedBy ? `**By:** <@${decidedBy}>` : "",
     ].filter(Boolean).join("\n"))],
     components: rows,
   };
@@ -871,15 +871,15 @@ client.on(Events.InteractionCreate, async interaction => {
       if (commandName === "rate") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
         const target = interaction.options.getUser("user", true);
-        if (!target || target.bot) return interaction.reply({ content: "❌ اختر عميلاً حقيقياً (وليس بوتاً).", ephemeral: true });
+        if (!target || target.bot) return interaction.reply({ content: "❌ Pick a real customer, not a bot.", ephemeral: true });
         const all = ratings.getProducts();
-        if (!all.length) return interaction.reply({ content: "❌ لا توجد منتجات بعد — أضف منتجاً من لوحة التحكم أولاً.", ephemeral: true });
+        if (!all.length) return interaction.reply({ content: "❌ No products yet — add one from the panel first.", ephemeral: true });
         const raw = interaction.options.getString("product", true);
         const product = ratings.findProduct(interaction.guildId, raw);
-        if (!product) return interaction.reply({ content: "❌ المنتج غير موجود. المنتجات المتاحة:\n" + all.map(p => `• **${p.name}**`).join("\n"), ephemeral: true });
+        if (!product) return interaction.reply({ content: "❌ Product not found. Available products:\n" + all.map(p => `• **${p.name}**`).join("\n"), ephemeral: true });
         const ok = await ratings.sendPurchaseDM(target, product, interaction.client, interaction.guild);
-        if (!ok) return interaction.reply({ content: `❌ تعذر إرسال رسالة خاصة إلى ${target} — ربما قفل الخاص.`, ephemeral: true });
-        return interaction.reply({ content: `✅ تم إرسال رسالة تقييم **«${product.name}»** إلى ${target} على الخاص.`, ephemeral: true });
+        if (!ok) return interaction.reply({ content: `❌ Could not DM ${target} — their DMs may be closed.`, ephemeral: true });
+        return interaction.reply({ content: `✅ Sent the **${product.name}** rating DM to ${target}.`, ephemeral: true });
       }
       if (commandName === "product-edit") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -898,9 +898,9 @@ client.on(Events.InteractionCreate, async interaction => {
         const products = db.prepare("SELECT * FROM products ORDER BY id DESC").all();
         if (!products.length) return interaction.reply({ content: "Add products first using /product-add.", ephemeral: true });
         return interaction.reply({
-          embeds: [embed("🛍️ نشر المنتجات", `في ${Math.min(products.length, 10)} منتج.\nاختر الروم الذي تريد نشر المنتجات فيه.`)],
+          embeds: [embed("🛍️ Publish Products", `${Math.min(products.length, 10)} product(s).\nPick the channel to publish them in.`)],
           components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder()
-            .setCustomId("d7_showcase_channel").setPlaceholder("اختر روم عرض المنتجات")
+            .setCustomId("d7_showcase_channel").setPlaceholder("Pick the showcase channel")
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1))],
         });
       }
@@ -1041,8 +1041,8 @@ client.on(Events.InteractionCreate, async interaction => {
       else if (target === "bot") config.autoRoles.botRoleId = roleId;
       saveConfig();
       return interaction.update(autorolesSection(roleId
-        ? `✅ تم حفظ ${target === "member" ? "رتبة الأعضاء" : "رتبة البوتات"}: <@&${roleId}>.`
-        : `🗑️ تم مسح ${target === "member" ? "رتبة الأعضاء" : "رتبة البوتات"}.`));
+        ? `✅ Saved the ${target === "member" ? "member" : "bot"} role: <@&${roleId}>.`
+        : `🗑️ Cleared the ${target === "member" ? "member" : "bot"} role.`));
     }
 
     if (interaction.isButton()) {
@@ -1058,14 +1058,14 @@ client.on(Events.InteractionCreate, async interaction => {
         if (section === "publish-products") {
           const products = db.prepare("SELECT * FROM products ORDER BY id DESC").all();
           if (!products.length) return interaction.reply({ content: "Add products first from the Products section.", ephemeral: true });
-          return interaction.reply({ content: "اختر الروم الذي تريد نشر المنتجات فيه:", components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId("d7_showcase_channel").setPlaceholder("اختر روم عرض المنتجات").addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1))] });
+          return interaction.reply({ content: "Pick the channel to publish the products in:", components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId("d7_showcase_channel").setPlaceholder("Pick the showcase channel").addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1))] });
         }
         if (section === "products-list") return interaction.update(productsSection());
         if (section === "delete-product") {
           const rows = productDeleteRows();
-          if (!rows) return interaction.reply({ content: "لا توجد منتجات لحذفها.", ephemeral: true });
+          if (!rows) return interaction.reply({ content: "There are no products to delete.", ephemeral: true });
           return interaction.update({
-            embeds: [embed("🗑️ حذف منتج", "**اختر المنتج من القائمة بالأسفل.**\n⚠️ الحذف نهائي ولا يمكن التراجع عنه.\nالمنتجات التي لديها طلبات مسجلة لا يمكن حذفها حفاظاً على سجل المبيعات.")],
+            embeds: [embed("🗑️ Delete Product", "**Pick a product from the menu below.**\n⚠️ Deletion is permanent and cannot be undone.\nProducts with recorded orders cannot be deleted, to protect the sales history.")],
             components: rows,
           });
         }
@@ -1086,13 +1086,13 @@ client.on(Events.InteractionCreate, async interaction => {
         if (section === "ticket-stats") return interaction.update(ticketStatsSection());
         if (section === "publish-tickets") {
           const enabled = tickets.types().filter(x => x.enabled !== false);
-          if (!enabled.length) return interaction.reply({ content: "❌ لا توجد أنواع تذاكر مفعّلة — فعّل نوعاً واحداً على الأقل من إعدادات التذاكر.", ephemeral: true });
+          if (!enabled.length) return interaction.reply({ content: "❌ No ticket types are enabled — enable at least one from Ticket Settings.", ephemeral: true });
           try {
             await interaction.channel.send({ embeds: [tickets.panelEmbed()], components: tickets.panelRows() });
           } catch (err) {
-            return interaction.reply({ content: `❌ تعذر الإرسال في هذا الروم.\nتأكد أن البوت يملك صلاحية **إرسال الرسائل** هنا.\n\n\`${err.message}\``, ephemeral: true });
+            return interaction.reply({ content: `❌ Could not send in this channel.\nMake sure the bot has **Send Messages** here.\n\n\`${err.message}\``, ephemeral: true });
           }
-          return interaction.reply({ content: `✅ تم إرسال لوحة التذاكر إلى <#${interaction.channel.id}>!`, ephemeral: true });
+          return interaction.reply({ content: `✅ Ticket panel sent to <#${interaction.channel.id}>!`, ephemeral: true });
         }
         if (section === "content") {
           const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:news").setLabel("Post News").setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId("panel:rules").setLabel("Post Rules").setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId("panel:update").setLabel("Post Update").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("panel:embed").setLabel("Custom Embed").setStyle(ButtonStyle.Secondary));
@@ -1115,32 +1115,32 @@ client.on(Events.InteractionCreate, async interaction => {
             config.welcome.enabled = config.welcome.enabled === false;
             saveConfig();
             return interaction.update(welcomeSection(config.welcome.enabled
-              ? "✅ فُعّلت رسالة الترحيب — توصل للعضو على الخاص عند انضمامه."
-              : "❌ أُوقفت رسالة الترحيب. ما ترسل لأي عضو جديد."));
+              ? "✅ Welcome message on — it is DM'd when a member joins."
+              : "❌ Welcome message off — nothing is sent to new members."));
           }
           if (flag === "mode") {
             ensureWelcome();
             config.welcome.sendDM = config.welcome.sendDM === false;
             saveConfig();
             return interaction.update(welcomeSection(config.welcome.sendDM
-              ? "📨 راح توصل رسالة الترحيب على **خاص** العضو — وإن كان خاصه مقفول تنشر في روم الترحيب."
-              : "🗨️ راح تُنشر رسالة الترحيب مباشرة في **روم الترحيب** المحدد من قسم الرومات."));
+              ? "📨 The welcome message is DM'd to the member — if their DMs are closed it is posted in the welcome channel."
+              : "🗨️ The welcome message is posted directly in the **welcome channel** set from the Channels section."));
           }
           if (flag === "text") {
             const w = ensureWelcome();
-            const modal = new ModalBuilder().setCustomId("panel_modal:welcome_text").setTitle("نص رسالة الترحيب");
+            const modal = new ModalBuilder().setCustomId("panel_modal:welcome_text").setTitle("Welcome message text");
             modal.addComponents(
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("title").setLabel("العنوان (Welcome to ...)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256).setValue(String(w.title || ""))),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("body").setLabel("النص التعريفي").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000).setValue(String(w.message || ""))),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("footer").setLabel("الفوتر أسفل الصورة (اختياري)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(200).setValue(String(w.footer || ""))),
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("title").setLabel("Title (Welcome to ...)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256).setValue(String(w.title || ""))),
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("body").setLabel("Body").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000).setValue(String(w.message || ""))),
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("footer").setLabel("Footer under the image (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(200).setValue(String(w.footer || ""))),
             );
             return interaction.showModal(modal);
           }
           if (flag === "image") {
             const w = ensureWelcome();
-            const modal = new ModalBuilder().setCustomId("panel_modal:welcome_image").setTitle("صورة الترحيب");
+            const modal = new ModalBuilder().setCustomId("panel_modal:welcome_image").setTitle("Welcome image");
             modal.addComponents(
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("url").setLabel("رابط صورة مباشر تظهر تحت الرسالة").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500).setValue(String(w.imageUrl || ""))),
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("url").setLabel("Direct image URL shown under the message").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500).setValue(String(w.imageUrl || ""))),
             );
             return interaction.showModal(modal);
           }
@@ -1151,7 +1151,7 @@ client.on(Events.InteractionCreate, async interaction => {
           config.autoRoles ||= { enabled: false, memberRoleId: "", botRoleId: "" };
           config.autoRoles.enabled = !config.autoRoles.enabled;
           saveConfig();
-          return interaction.update(autorolesSection(config.autoRoles.enabled ? "✅ تم تفعيل الرتب التلقائية — تُعطى عند دخول عضو جديد." : "❌ تم إيقاف الرتب التلقائية."));
+          return interaction.update(autorolesSection(config.autoRoles.enabled ? "✅ Auto Roles on — granted when a new member joins." : "❌ Auto Roles off."));
         }
         if (section === "home") return interaction.update(mainPanel());
         if (section === "refresh") {
@@ -1171,7 +1171,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const result = db.prepare("INSERT INTO orders (guild_id,user_id,product_id) VALUES (?,?,?)").run(interaction.guildId, interaction.user.id, p.id);
         await interaction.reply({ content: `Purchase request created: **Order #${result.lastInsertRowid}**. A staff member must confirm payment before the product role is granted.`, ephemeral: true });
         const notifyKey = safeChannelId(config.channels?.orders) ? "orders" : "salesLogs";
-        await sendToConfiguredChannel(interaction.guild, notifyKey, { embeds: [purchaseFeedEmbed(p, interaction.user.id, { orderId: Number(result.lastInsertRowid), note: "بانتظار تأكيد الموظف" })] });
+        await sendToConfiguredChannel(interaction.guild, notifyKey, { embeds: [purchaseFeedEmbed(p, interaction.user.id, { orderId: Number(result.lastInsertRowid), note: "Awaiting staff confirmation" })] });
         await refreshAdminDashboard(interaction.guild);
         return;
       }
@@ -1198,12 +1198,12 @@ client.on(Events.InteractionCreate, async interaction => {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       const [, rawId, decision] = interaction.customId.split(":");
       const check = db.purchaseChecks.get(Number(rawId));
-      if (!check) return interaction.reply({ content: "❌ هذا الطلب غير موجود.", ephemeral: true });
-      if (check.status !== "pending") return interaction.reply({ content: `هذا الطلب تم ${check.status === "approved" ? "تأكيده" : "رفضه"} بالفعل.`, ephemeral: true });
+      if (!check) return interaction.reply({ content: "❌ This check does not exist.", ephemeral: true });
+      if (check.status !== "pending") return interaction.reply({ content: `This check was already ${check.status === "approved" ? "confirmed" : "rejected"}.`, ephemeral: true });
       const approved = decision === "ok";
       // نحدّد الحالة أولاً حتى لا يمراره اثنان في نفس اللحظة
       const changed = db.purchaseChecks.decide(check.id, approved ? "approved" : "rejected", interaction.user.id);
-      if (!changed.changes) return interaction.reply({ content: "سبق وتم اتخاذ القرار لهذا الطلب.", ephemeral: true });
+      if (!changed.changes) return interaction.reply({ content: "Someone already decided this check.", ephemeral: true });
       const product = ratings.getProducts().find(p => p.id === String(check.product_id)) || null;
       let dmSent = false;
       if (approved) {
@@ -1219,10 +1219,10 @@ client.on(Events.InteractionCreate, async interaction => {
       }
       const lines = [
         approved
-          ? `✅ تم تأكيد شراء <@${check.user_id}> لمنتج **${product?.name || "غير معروف"}**.`
-          : `❌ تم رفض تأكيد شراء <@${check.user_id}> — لم تُرسل له أي رسالة.`,
+          ? `✅ Confirmed <@${check.user_id}>'s purchase of **${product?.name || "Unknown"}**.`
+          : `❌ Rejected <@${check.user_id}>'s purchase — nothing was sent.`,
       ];
-      if (approved && !dmSent) lines.push("⚠️ تعذر إرسال رسالة التقييم للخاص — ربما قفلها العضو.");
+      if (approved && !dmSent) lines.push("⚠️ Could not DM the rating message — the member may have DMs closed.");
       return interaction.reply({ content: lines.join("\n"), ephemeral: true });
     }
 
@@ -1230,25 +1230,25 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isRoleSelectMenu() && interaction.customId === "d7_prod_role") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       const pending = pendingProduct.get(interaction.user.id);
-      if (!pending) return interaction.reply({ content: "انتهت مهلة إضافة المنتج. أعد الأمر /product-add.", ephemeral: true });
+      if (!pending) return interaction.reply({ content: "The product step timed out. Run /product-add again.", ephemeral: true });
       pending.roleId = interaction.values[0];
       return productAfterRole(interaction);
     }
     if (interaction.isButton() && interaction.customId === "d7_prod_role_skip") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       const pending = pendingProduct.get(interaction.user.id);
-      if (!pending) return interaction.reply({ content: "انتهت مهلة إضافة المنتج. أعد الأمر /product-add.", ephemeral: true });
+      if (!pending) return interaction.reply({ content: "The product step timed out. Run /product-add again.", ephemeral: true });
       pending.roleId = "";
       return productAfterRole(interaction);
     }
     if (interaction.isButton() && interaction.customId === "d7_prod_role_cancel") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       pendingProduct.delete(interaction.user.id);
-      return respondWith(interaction, { ...productsSection(), content: "❌ تم إلغاء إضافة المنتج." });
+      return respondWith(interaction, { ...productsSection(), content: "❌ Product addition cancelled." });
     }
     if (interaction.isButton() && interaction.customId === "d7_prod_name_step") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-      if (!pendingProduct.has(interaction.user.id)) return interaction.reply({ content: "انتهت مهلة إضافة المنتج. أعد الأمر /product-add.", ephemeral: true });
+      if (!pendingProduct.has(interaction.user.id)) return interaction.reply({ content: "The product step timed out. Run /product-add again.", ephemeral: true });
       return interaction.showModal(productNameModal());
     }
 
@@ -1257,19 +1257,19 @@ client.on(Events.InteractionCreate, async interaction => {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       const id = Number(interaction.values[0]);
       const product = db.prepare("SELECT * FROM products WHERE id=?").get(id);
-      if (!product) return interaction.reply({ content: "❌ المنتج غير موجود.", ephemeral: true });
+      if (!product) return interaction.reply({ content: "❌ Product not found.", ephemeral: true });
       // المنتجات التي لديها طلبات مسجلة ما نحذفها — حفاظاً على سجل المبيعات
       // (وأصلاً: جدول الطلبات مرتبط بالمنتج بمفتاح خارجي)
       const orderCount = db.prepare("SELECT COUNT(*) n FROM orders WHERE product_id=?").get(id).n;
       if (orderCount) {
-        return interaction.reply({ content: `❌ لا يمكن حذف **${product.name}** — لديه ${orderCount} طلب مسجل.\nحذفه سيفقد سجل المبيعات. يمكنك إيقافه من تعديل المنتج بدلاً من ذلك.`, ephemeral: true });
+        return interaction.reply({ content: `❌ Cannot delete **${product.name}** — it has ${orderCount} recorded order(s).\nDeleting it would lose the sales history. Disable it via product-edit instead.`, ephemeral: true });
       }
       // ننظف بيانات المنتج: التقييمات والمشاهدات
       db.prepare("DELETE FROM ratings WHERE product_id=?").run(String(id));
       db.prepare("DELETE FROM product_reviews WHERE product_id=?").run(id);
       db.prepare("DELETE FROM purchase_checks WHERE product_id=?").run(String(id));
       db.prepare("DELETE FROM products WHERE id=?").run(id);
-      return respondWith(interaction, { ...productsSection(), content: `🗑️ تم حذف المنتج **${product.name}** نهائياً.` });
+      return respondWith(interaction, { ...productsSection(), content: `🗑️ Deleted product **${product.name}** permanently.` });
     }
 
     // ─────────── اختيار روم نشر المنتجات ───────────
@@ -1284,7 +1284,7 @@ client.on(Events.InteractionCreate, async interaction => {
       for (const product of products.slice(0, 10)) {
         await interaction.guild.channels.cache.get(channelId)?.send({ embeds: [productEmbed(product)], components: productPanelRows(product.id) }).then(() => sent++).catch(() => {});
       }
-      return interaction.reply({ content: `✅ تم نشر ${sent} منتج في <#${channelId}>.`, ephemeral: true });
+      return interaction.reply({ content: `✅ Published ${sent} product(s) in <#${channelId}>.`, ephemeral: true });
     }
 
     // ─────────── اختيار رومات التنبيهات والنشر ───────────
@@ -1330,14 +1330,14 @@ client.on(Events.InteractionCreate, async interaction => {
       // min 0 → الإرسال بدون قيمة يعني مسح الرابط (تختفي من رسالة الترحيب)
       config.welcome[welcomeChMap[interaction.customId]] = interaction.values[0] || "";
       saveConfig();
-      return interaction.update(welcomeSection(interaction.values[0] ? "✅ تم حفظ الروم." : "🗑️ تم مسح الرابط — هذا السطر ما يظهر في رسالة الترحيب."));
+      return interaction.update(welcomeSection(interaction.values[0] ? "✅ Channel saved." : "🗑️ Link cleared — this line no longer appears in the welcome message."));
     }
     if (interaction.isRoleSelectMenu() && interaction.customId === "d7_welcome_role") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       ensureWelcome();
       config.welcome.storeRoleId = interaction.values[0] || "";
       saveConfig();
-      return interaction.update(welcomeSection(interaction.values[0] ? "✅ تم حفظ رتبة المتجر." : "🗑️ تم مسح الرتبة — سطر المتجر ما يظهر في رسالة الترحيب."));
+      return interaction.update(welcomeSection(interaction.values[0] ? "✅ Store role saved." : "🗑️ Role cleared — the store line no longer appears in the welcome message."));
     }
 
     // ─────────── نظام التقييمات (نسخة من NSR Hub) ───────────
@@ -1346,10 +1346,10 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isModalSubmit() && interaction.customId.startsWith("rate_comment_")) return ratings.handleCommentModal(interaction);
     if (interaction.isButton() && interaction.customId === "d7_rate_send") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-      const modal = new ModalBuilder().setCustomId("d7_rate_send_modal").setTitle("إرسال تقييم لعميل");
+      const modal = new ModalBuilder().setCustomId("d7_rate_send_modal").setTitle("Send a rating to a customer");
       modal.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("user").setLabel("معرف العضو (User ID)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("product").setLabel("اسم المنتج أو رقمه").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("user").setLabel("Member ID (User ID)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("product").setLabel("Product name or number").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)),
       );
       return interaction.showModal(modal);
     }
@@ -1358,9 +1358,9 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isButton() && interaction.customId === "d7_perm_admins") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       const ids = (config.permissions?.adminUserIds || []).join(", ");
-      const modal = new ModalBuilder().setCustomId("d7_perm_admins_modal").setTitle("مدراء البوت");
+      const modal = new ModalBuilder().setCustomId("d7_perm_admins_modal").setTitle("Bot managers");
       modal.addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId("ids").setLabel("معرفات المدراء (مفصولة بفاصلة)").setStyle(TextInputStyle.Paragraph).setRequired(false).setPlaceholder(ids || "123456789012345678").setMaxLength(1000)
+        new TextInputBuilder().setCustomId("ids").setLabel("Manager IDs (comma separated)").setStyle(TextInputStyle.Paragraph).setRequired(false).setPlaceholder(ids || "123456789012345678").setMaxLength(1000)
       ));
       return interaction.showModal(modal);
     }
@@ -1384,19 +1384,19 @@ client.on(Events.InteractionCreate, async interaction => {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       const typeId = interaction.customId.split(":")[1];
       const tp = tickets.types().find(x => x.id === typeId);
-      if (!tp) return interaction.reply({ content: "❌ النوع غير موجود.", ephemeral: true });
+      if (!tp) return interaction.reply({ content: "❌ That type does not exist.", ephemeral: true });
       tp.enabled = tp.enabled === false;
       tickets.saveConfig();
       await interaction.update(ticketsSection());
-      return interaction.followUp({ content: `${tp.enabled === false ? "❌ تم إخفاء" : "✅ تم إظهار"} نوع «${tp.label}».\nأعد إرسال لوحة التذاكر لتطبيق التغيير.`, ephemeral: true }).catch(() => {});
+      return interaction.followUp({ content: `${tp.enabled === false ? "❌ Hid" : "✅ Shown"} the **${tp.label}** type.\nRe-send the ticket panel to apply.`, ephemeral: true }).catch(() => {});
     }
     if (interaction.isButton() && interaction.customId === "d7_tk_add") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-      const modal = new ModalBuilder().setCustomId("d7_tk_add_modal").setTitle("➕ إضافة نوع تذكرة");
+      const modal = new ModalBuilder().setCustomId("d7_tk_add_modal").setTitle("➕ Add a ticket type");
       modal.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_name").setLabel("اسم النوع").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(50).setPlaceholder("مثال: Purchase")),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_desc").setLabel("الوصف").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setPlaceholder("مثال: Inquire about buying a product or service")),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_emoji").setLabel("الإيموجي (حرف واحد)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(4).setPlaceholder("مثال: 🛒")),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_name").setLabel("Type name").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(50).setPlaceholder("e.g. Purchase")),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_desc").setLabel("Description").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setPlaceholder("e.g. Ask about buying a product or service")),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_emoji").setLabel("Emoji (single)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(4).setPlaceholder("e.g. 🛒")),
       );
       return interaction.showModal(modal);
     }
@@ -1404,10 +1404,10 @@ client.on(Events.InteractionCreate, async interaction => {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       const custom = tickets.types().filter(x => String(x.id || "").startsWith("c"));
       if (!custom.length) {
-        return interaction.reply({ content: "🗑️ لا توجد أنواع مخصصة للحذف — الأنواع العامة لا تُحذف.", ephemeral: true });
+        return interaction.reply({ content: "🗑️ No custom types to delete — the built-in types cannot be removed.", ephemeral: true });
       }
       await interaction.update({ embeds: [interaction.message.embeds[0]], components: ticketDeleteRows() });
-      return interaction.followUp({ content: "🗑️ اختر النوع المخصص الذي تريد حذفه من القائمة بالأسفل.", ephemeral: true }).catch(() => {});
+      return interaction.followUp({ content: "🗑️ Pick the custom type to delete from the menu below.", ephemeral: true }).catch(() => {});
     }
     if (interaction.isButton() && interaction.customId === "d7_tk_del_back") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -1420,21 +1420,21 @@ client.on(Events.InteractionCreate, async interaction => {
       const tp = all.find(x => x.id === typeId);
       if (!tp || !String(tp.id || "").startsWith("c")) {
         await interaction.update(ticketsSection());
-        return interaction.followUp({ content: "❌ هذا النوع عام ولا يمكن حذفه.", ephemeral: true }).catch(() => {});
+        return interaction.followUp({ content: "❌ This type is built-in and cannot be deleted.", ephemeral: true }).catch(() => {});
       }
       tickets.ensureConfig().ticketTypes = all.filter(x => x.id !== typeId);
       tickets.saveConfig();
       await interaction.update(ticketsSection());
-      return interaction.followUp({ content: `🗑️ تم حذف نوع «${tp.label}». أرسل اللوحة لتطبيق التغيير.`, ephemeral: true }).catch(() => {});
+      return interaction.followUp({ content: `🗑️ Deleted the **${tp.label}** type. Re-send the panel to apply.`, ephemeral: true }).catch(() => {});
     }
     if (interaction.isButton() && interaction.customId === "d7_tk_text") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       const t = tickets.ensureConfig();
-      const modal = new ModalBuilder().setCustomId("d7_tk_text_modal").setTitle("نص لوحة التذاكر");
+      const modal = new ModalBuilder().setCustomId("d7_tk_text_modal").setTitle("Ticket panel text");
       modal.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_title").setLabel("عنوان اللوحة").setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder((t.panel?.title || "🎫 Support Tickets").slice(0, 100)).setMaxLength(100)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_body").setLabel("وصف اللوحة").setStyle(TextInputStyle.Paragraph).setRequired(true).setPlaceholder("Welcome to our support system! ...").setMaxLength(900)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_footer").setLabel("الفوتر (اختياري)").setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder((t.panel?.footer || config.brand?.footer || "S2A DEV").slice(0, 100)).setMaxLength(100)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_title").setLabel("Panel title").setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder((t.panel?.title || "🎫 Support Tickets").slice(0, 100)).setMaxLength(100)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_body").setLabel("Panel description").setStyle(TextInputStyle.Paragraph).setRequired(true).setPlaceholder("Welcome to our support system! ...").setMaxLength(900)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("tk_footer").setLabel("Footer (optional)").setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder((t.panel?.footer || config.brand?.footer || "S2A DEV").slice(0, 100)).setMaxLength(100)),
       );
       return interaction.showModal(modal);
     }
@@ -1462,14 +1462,14 @@ client.on(Events.InteractionCreate, async interaction => {
       const name = interaction.fields.getTextInputValue("tk_name").trim();
       const desc = interaction.fields.getTextInputValue("tk_desc").trim();
       const emoji = interaction.fields.getTextInputValue("tk_emoji").trim();
-      if (!name || !desc) return interaction.reply({ content: "❌ اسم النوع والوصف مطلوبان.", ephemeral: true });
+      if (!name || !desc) return interaction.reply({ content: "❌ The type name and description are required.", ephemeral: true });
       const t = tickets.ensureConfig();
       const tp = { id: "c" + Date.now().toString(36), label: name, description: desc, color: EMBED_COLOR, enabled: true };
       if (emoji && /^\p{Extended_Pictographic}$/u.test(emoji)) tp.emoji = emoji;
       else if (emoji) tp.emoji = "";
       t.ticketTypes.push(tp);
       tickets.saveConfig();
-      await interaction.reply({ content: `✅ تم إضافة نوع «${name}». أرسل اللوحة لتطبيق التغيير.`, ephemeral: true });
+      await interaction.reply({ content: `✅ Added the **${name}** type. Re-send the panel to apply.`, ephemeral: true });
       return interaction.message?.edit(ticketsSection()).catch(() => {});
     }
     if (interaction.isModalSubmit() && interaction.customId === "d7_tk_text_modal") {
@@ -1480,21 +1480,21 @@ client.on(Events.InteractionCreate, async interaction => {
       t.panel.description = interaction.fields.getTextInputValue("tk_body").trim();
       t.panel.footer = (interaction.fields.getTextInputValue("tk_footer") || "").trim() || config.brand?.footer || "S2A DEV";
       tickets.saveConfig();
-      await interaction.reply({ content: "✅ تم حفظ نص لوحة التذاكر.", ephemeral: true });
+      await interaction.reply({ content: "✅ Ticket panel text saved.", ephemeral: true });
       return interaction.message?.edit(ticketsSection()).catch(() => {});
     }
     if (interaction.isModalSubmit() && interaction.customId === "d7_rate_send_modal") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       const userId = interaction.fields.getTextInputValue("user").trim();
-      if (!/^\d{17,20}$/.test(userId)) return interaction.reply({ content: "❌ معرف عضو غير صالح.", ephemeral: true });
+      if (!/^\d{17,20}$/.test(userId)) return interaction.reply({ content: "❌ Invalid member ID.", ephemeral: true });
       const raw = interaction.fields.getTextInputValue("product").trim();
       const product = ratings.findProduct(interaction.guildId, raw);
-      if (!product) return interaction.reply({ content: "❌ المنتج غير موجود. المنتجات المتاحة:\n" + ratings.getProducts().map(p => `• **${p.name}**`).join("\n"), ephemeral: true });
+      if (!product) return interaction.reply({ content: "❌ Product not found. Available products:\n" + ratings.getProducts().map(p => `• **${p.name}**`).join("\n"), ephemeral: true });
       const target = await interaction.client.users.fetch(userId).catch(() => null);
-      if (!target || target.bot) return interaction.reply({ content: "❌ لم يتم العثور على عضو حقيقي.", ephemeral: true });
+      if (!target || target.bot) return interaction.reply({ content: "❌ No real member was found.", ephemeral: true });
       const ok = await ratings.sendPurchaseDM(target, product, interaction.client, interaction.guild);
-      if (!ok) return interaction.reply({ content: `❌ تعذر إرسال رسالة خاصة إلى ${target} — ربما قفل الخاص.`, ephemeral: true });
-      return interaction.reply({ content: `✅ تم إرسال رسالة تقييم **«${product.name}»** إلى ${target} على الخاص.`, ephemeral: true });
+      if (!ok) return interaction.reply({ content: `❌ Could not DM ${target} — their DMs may be closed.`, ephemeral: true });
+      return interaction.reply({ content: `✅ Sent the **${product.name}** rating DM to ${target}.`, ephemeral: true });
     }
     if (interaction.isModalSubmit() && interaction.customId === "d7_perm_admins_modal") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -1502,7 +1502,7 @@ client.on(Events.InteractionCreate, async interaction => {
       config.permissions ||= {};
       config.permissions.adminUserIds = ids;
       saveConfig();
-      await interaction.reply({ content: `✅ تم حفظ ${ids.length} مدير بوت.`, ephemeral: true });
+      await interaction.reply({ content: `✅ Saved ${ids.length} bot manager(s).`, ephemeral: true });
       return interaction.message?.edit(permsSection()).catch(() => {});
     }
 
@@ -1511,16 +1511,16 @@ client.on(Events.InteractionCreate, async interaction => {
       const kind = interaction.customId.split(":")[1];
       if (kind === "add-price") {
         const price = Number(interaction.fields.getTextInputValue("price").replace(/,/g, ""));
-        if (!Number.isFinite(price) || price < 0) return interaction.reply({ content: "السعر لازم يكون رقم صحيح، مثال: 150 أو 150.50", ephemeral: true });
+        if (!Number.isFinite(price) || price < 0) return interaction.reply({ content: "The price must be a number, e.g. 150 or 150.50", ephemeral: true });
         const pending = pendingProduct.get(interaction.user.id);
-        if (!pending) return interaction.reply({ content: "انتهت مهلة إضافة المنتج. أعد الأمر /product-add.", ephemeral: true });
+        if (!pending) return interaction.reply({ content: "The product step timed out. Run /product-add again.", ephemeral: true });
         pending.price = price;
         if (pending.name === null || pending.name === undefined) return respondWith(interaction, productNameStep());
         return finishProduct(interaction);
       }
       if (kind === "add-name") {
         const pending = pendingProduct.get(interaction.user.id);
-        if (!pending) return interaction.reply({ content: "انتهت مهلة إضافة المنتج. أعد الأمر /product-add.", ephemeral: true });
+        if (!pending) return interaction.reply({ content: "The product step timed out. Run /product-add again.", ephemeral: true });
         pending.name = interaction.fields.getTextInputValue("name").trim();
         return finishProduct(interaction);
       }
@@ -1530,19 +1530,19 @@ client.on(Events.InteractionCreate, async interaction => {
         config.welcome.message = interaction.fields.getTextInputValue("body").trim();
         config.welcome.footer = interaction.fields.getTextInputValue("footer").trim();
         saveConfig();
-        await interaction.reply({ content: "✅ تم حفظ نص رسالة الترحيب.", ephemeral: true });
-        return interaction.message?.edit(welcomeSection("✅ تم حفظ النص.")).catch(() => {});
+        await interaction.reply({ content: "✅ Welcome message text saved.", ephemeral: true });
+        return interaction.message?.edit(welcomeSection("✅ Text saved.")).catch(() => {});
       }
       if (kind === "welcome_image") {
         ensureWelcome();
         const url = interaction.fields.getTextInputValue("url").trim();
         if (url && !/^https?:\/\//.test(url)) {
-          return interaction.reply({ content: "❌ لازم يبدأ الرابط بـ `https://` أو `http://`.", ephemeral: true });
+          return interaction.reply({ content: "❌ The URL must start with `https://` or `http://`.", ephemeral: true });
         }
         config.welcome.imageUrl = url;
         saveConfig();
-        await interaction.reply({ content: url ? "✅ تم حفظ صورة الترحيب." : "✅ تم مسح صورة الترحيب.", ephemeral: true });
-        return interaction.message?.edit(welcomeSection(url ? "✅ تم حفظ الصورة." : "✅ تم مسح الصورة.")).catch(() => {});
+        await interaction.reply({ content: url ? "✅ Welcome image saved." : "✅ Welcome image cleared.", ephemeral: true });
+        return interaction.message?.edit(welcomeSection(url ? "✅ Image saved." : "✅ Image cleared.")).catch(() => {});
       }
       const title = interaction.fields.getTextInputValue("title");
       const body = interaction.fields.getTextInputValue("body");

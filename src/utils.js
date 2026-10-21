@@ -6,7 +6,7 @@ const EMBED_COLOR = 0x2fa2fa;
 // شعار ثابت أعلى يمين كل إيمبد (مسار داخل المستودع العام).
 // ?v=2 مقصود: ديسكورد يخزّن الصور الخارجية حسب الرابط الكامل، وبدون تغيير
 // الرابط كان بيبقى عالق على النسخة القديمة (376x96) لوقت طويل
-const EMBED_THUMB = "https://raw.githubusercontent.com/modyisherw-ui/d7-dev-bot/main/assets/s2a-logo.png?v=3";
+const EMBED_THUMB = "https://raw.githubusercontent.com/modyisherw-ui/d7-dev-bot/main/assets/s2a-logo.png?v=4";
 
 function embed(title, description = "") {
   return new EmbedBuilder()

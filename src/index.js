@@ -538,27 +538,28 @@ async function refreshAdminDashboard(guild) {
 // ─────────── سجل الطلبات: إيمبد واحد لكل طلب ───────────
 // روم الطلبات يجيب حالة الطلب، وكل تغيير حالة ينزل برسالته الخاصة
 // (مو تعديل الرسالة السابقة، ومو لستة مجمّعة) عشان يظل الأرشيف واضح.
+// label = الإنجليزي للوحة التحكم، label_ar = لرسائل السجل بالعربي
 const ORDER_STATUS = {
-  pending:   { label: "Pending",     emoji: "⏳" },
-  confirmed: { label: "In progress", emoji: "🚚" },
-  delivered: { label: "Completed",   emoji: "✅" },
-  cancelled: { label: "Cancelled",   emoji: "❌" },
+  pending:   { label: "Pending",     label_ar: "بانتظار التأكيد", emoji: "⏳" },
+  confirmed: { label: "In progress", label_ar: "قيد التنفيذ",     emoji: "🚚" },
+  delivered: { label: "Completed",   label_ar: "تم التنفيذ",      emoji: "✅" },
+  cancelled: { label: "Cancelled",   label_ar: "ملغى",            emoji: "❌" },
 };
 
 // order لازم يجي معه name / role_id / price / currency / user_id / status
 function orderFeedEmbed(order, extra = {}) {
-  const st = ORDER_STATUS[order.status] || { label: order.status || "Unknown", emoji: "ℹ️" };
-  const rating = order.rating ? `⭐ ${order.rating}/5` : "Not rated";
+  const st = ORDER_STATUS[order.status] || { label_ar: order.status || "غير معروفة", emoji: "ℹ️" };
+  const rating = order.rating ? `⭐ ${order.rating}/5` : "لم يتم التقييم";
   // رتبة المنتج بدل اسمه: الرتبة هي ما يحمله المشتري فعلاً، والاسم يتكرر معها
   // وحالة الطلب آخر سطر — آخر ما يقع عليه النظر بعد بقية التفاصيل
-  return embed(`🛒 Order #${order.id}`, [
-    `**Role:** ${order.role_id ? `<@&${order.role_id}>` : "No role"}`,
-    `**Buyer:** <@${order.user_id}>`,
-    `**Price:** ${formatPrice(order.price, order.currency)}`,
-    `**Rating:** ${rating}`,
-    order.confirmed_by ? `**Admin:** <@${order.confirmed_by}>` : "",
-    extra.note ? `**Note:** ${extra.note}` : "",
-    `**Order status:** ${st.emoji} ${st.label}`,
+  return embed(`🛒 طلب #${order.id}`, [
+    `**الرتبة:** ${order.role_id ? `<@&${order.role_id}>` : "بدون رتبة"}`,
+    `**المشتري:** <@${order.user_id}>`,
+    `**السعر:** ${formatPrice(order.price, order.currency)}`,
+    `**التقييم:** ${rating}`,
+    order.confirmed_by ? `**الاداري:** <@${order.confirmed_by}>` : "",
+    extra.note ? `**ملاحظة:** ${extra.note}` : "",
+    `**حالة الطلب:** ${st.emoji} ${st.label_ar}`,
   ].filter(Boolean).join("\n"));
 }
 
@@ -573,17 +574,36 @@ async function postOrderFeed(guild, order, extra) {
 }
 
 // ─────────── "شراء جديد" — نفس الشكل للمسارين ───────────
-// المسار الأول: زر شراء (ينشئ طلباً). المسار الثاني: منح رتبة يدوياً ثم موافقة
-// الموظف (ما يخلق طلباً) — لذلك لا نذكر رقماً غير موجود في الثاني.
+// المسار الأول: زر شراء (ينشئ طلباً بانتظار التأكيد). المسار الثاني: منح رتبة
+// يدوياً ثم موافقة الموظف (ما يخلق طلباً) — لذلك لا نذكر رقماً غير موجود في الثاني.
+// الشكل طلب المستخدم: المنتج = منشن الرتبة مو الاسم، والحقول إنجليزي،
+// وحالة الطلب عربي بقيمة عربية.
 function purchaseFeedEmbed(product, buyerId, opts = {}) {
-  return embed("🛒 New purchase", [
-    `**Product:** ${product.name}`,
-    `**Buyer:** <@${buyerId}>`,
+  // المسارين يمرّران شكلين مختلفين: زر الشراء يمرّر صف قاعدة البيانات (role_id)
+  // ومسار تأكيد الشراء يمرّر ناتج ratings.getProducts() المسمّى roleId.
+  // بدون هذي المطابقة يظهر اسم المنتج بدل الرتبة في أحد المسارين بصمت.
+  const roleId = product?.role_id || product?.roleId || "";
+  const roleMention = roleId ? `<@&${roleId}>` : (product?.name || "Unknown");
+  // المسار الأول طلب جديد → معلّق. المسار الثاني موافقة يدوية → مؤكد.
+  const statusAr = opts.approvedBy ? "✅ تم التأكيد" : "⏳ بانتظار التأكيد";
+  const lines = [
+    `**Product**\n${roleMention}`,
+    `**Buyer:**\n<@${buyerId}>`,
     `**Price:** ${formatPrice(product.price, product.currency)}`,
     opts.orderId ? `**Order:** #${opts.orderId}` : "",
+    // فاصل بصري قبل الحالة، بس ما نبي سطور فاضية زايدة
+    "SPLIT",
+    `**حالة الطلب:** ${statusAr}`,
     opts.approvedBy ? `**Admin:** <@${opts.approvedBy}>` : "",
     opts.note ? `**Note:** ${opts.note}` : "",
-  ].filter(Boolean).join("\n"));
+  ].filter(Boolean);
+  // نحذف الفاصل إذا ما بعده شي، ونفكّه لسطر فاضي
+  const out = [];
+  for (const l of lines) {
+    if (l === "SPLIT") { if (out.length) out.push(""); continue; }
+    out.push(l);
+  }
+  return embed("🛒 New purchase", out.join("\n"));
 }
 
 async function postPurchaseFeed(guild, product, buyerId, opts) {

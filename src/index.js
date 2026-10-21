@@ -562,6 +562,25 @@ async function postOrderFeed(guild, order, extra) {
   return sendToConfiguredChannel(guild, "orders", { embeds: [orderFeedEmbed(order, extra)] }).catch(() => false);
 }
 
+// ─────────── "شراء جديد" — نفس الشكل للمسارين ───────────
+// المسار الأول: زر شراء (ينشئ طلباً). المسار الثاني: منح رتبة يدوياً ثم موافقة
+// الموظف (ما يخلق طلباً) — لذلك لا نذكر رقماً غير موجود في الثاني.
+function purchaseFeedEmbed(product, buyerId, opts = {}) {
+  return embed("🛒 شراء جديد", [
+    `**المنتج:** ${product.name}`,
+    `**المشتري:** <@${buyerId}>`,
+    `**السعر:** ${formatPrice(product.price, product.currency)}`,
+    opts.orderId ? `**الطلب:** #${opts.orderId}` : "",
+    opts.approvedBy ? `**أكده:** <@${opts.approvedBy}>` : "",
+    opts.note ? `**ملاحظة:** ${opts.note}` : "",
+  ].filter(Boolean).join("\n"));
+}
+
+async function postPurchaseFeed(guild, product, buyerId, opts) {
+  // الإشعار مكمّل: لو الروم غير محدد يرجع false بصمت والتثبيت يظل قائماً
+  return sendToConfiguredChannel(guild, "orders", { embeds: [purchaseFeedEmbed(product, buyerId, opts)] }).catch(() => false);
+}
+
 // ─────────── روم حالة المنتجات (داخل قسم الطلبات) ───────────
 const PRODUCT_STATUS = {
   working:     { label: "يعمل",         emoji: "✅" },
@@ -1142,7 +1161,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const result = db.prepare("INSERT INTO orders (guild_id,user_id,product_id) VALUES (?,?,?)").run(interaction.guildId, interaction.user.id, p.id);
         await interaction.reply({ content: `Purchase request created: **Order #${result.lastInsertRowid}**. A staff member must confirm payment before the product role is granted.`, ephemeral: true });
         const notifyKey = safeChannelId(config.channels?.orders) ? "orders" : "salesLogs";
-        await sendToConfiguredChannel(interaction.guild, notifyKey, { embeds: [embed("New purchase request", `Order #${result.lastInsertRowid}\nCustomer: ${interaction.user}\nProduct: **${p.name}**\nPrice: ${formatPrice(p.price,p.currency)}\nConfirm using /order-confirm order_id:${result.lastInsertRowid}`)] });
+        await sendToConfiguredChannel(interaction.guild, notifyKey, { embeds: [purchaseFeedEmbed(p, interaction.user.id, { orderId: Number(result.lastInsertRowid), note: "بانتظار تأكيد الموظف" })] });
         await refreshAdminDashboard(interaction.guild);
         return;
       }
@@ -1180,6 +1199,8 @@ client.on(Events.InteractionCreate, async interaction => {
       if (approved) {
         const target = await interaction.client.users.fetch(check.user_id).catch(() => null);
         if (target && !target.bot) dmSent = await ratings.sendPurchaseDM(target, product, interaction.client, interaction.guild);
+        // موافقة يدوية على منحة = شراء مكتمل — هذا هو المسار الذي لم يكن ينشر أبداً
+        if (product) await postPurchaseFeed(interaction.guild, product, check.user_id, { approvedBy: interaction.user.id });
       }
       // نحدّث الرسالة نفسها: نخفي الأزرار ونوضح النتيجة
       if (check.message_id && interaction.channel?.messages) {

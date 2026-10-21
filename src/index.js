@@ -342,11 +342,14 @@ function ordersSection() {
   // ملاحظة: الـ placeholder يظهر فقط لما ما يكون فيه روم محفوظ —
   // ولو كان محفوظاً يظهر اسمه داخل القائمة مكانها، عشان كذا نذكره في نص الرسالة.
   rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_ch", "orders", "📋 اختر روم سجل الطلبات")));
+  // ⬇️ روم حالة المنتجات: /product-edit ينزل فيه رسالة لكل تغيير حالة
+  // (بلا روم محفوظ يظهر الـ placeholder، عشان يبان من أول مرة)
+  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_prod_status_ch", "productStatus", "🔄 اختر روم حالة المنتجات")));
   rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("panel:orders").setLabel("🔄 تحديث").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 الرئيسية").setStyle(ButtonStyle.Secondary)
   ));
-  return { embeds: [embed("🧾 الطلبات", `${desc}\n\nأكّد الدفع من القائمة بالأعلى، والعميل ياخذ رتبة المنتج تلقائياً.\n**📋 الروم أسفل الرسالة هو سجل الطلبات** — كل تأكيد أو تسليم أو إلغاء ينزل فيه رسالة جديدة بحالة الطلب.`)], components: rows.slice(0, 5) };
+  return { embeds: [embed("🧾 الطلبات", `${desc}\n\nأكّد الدفع من القائمة بالأعلى، والعميل ياخذ رتبة المنتج تلقائياً.\n**📋 الروم أسفل الرسالة هو سجل الطلبات** — كل تأكيد أو تسليم أو إلغاء ينزل فيه رسالة جديدة بحالة الطلب.\n**🔄 روم حالة المنتجات** — كل تغيير حالة منتج تنزل فيه رسالة.`)], components: rows.slice(0, 5) };
 }
 
 // ─────────── قسم التقييمات (نسخة من NSR Hub) ───────────
@@ -557,6 +560,31 @@ function orderForFeed(id) {
 async function postOrderFeed(guild, order, extra) {
   // لو الروم مش منضبط ما نفشل العملية كلها — الإشعار مكمّل مو أساسي
   return sendToConfiguredChannel(guild, "orders", { embeds: [orderFeedEmbed(order, extra)] }).catch(() => false);
+}
+
+// ─────────── روم حالة المنتجات (داخل قسم الطلبات) ───────────
+const PRODUCT_STATUS = {
+  working:     { label: "يعمل",         emoji: "✅" },
+  maintenance: { label: "تحت الصيانة", emoji: "🛠️" },
+  stopped:     { label: "متوقف",        emoji: "⛔" },
+};
+
+// رسالة واحدة لكل تغيير حالة، ولا تنزل لو الحالة رجعت نفس ما كانت
+function productStatusEmbed(product, from, to, by) {
+  const t = PRODUCT_STATUS[to] || { label: to || "غير معروفة", emoji: "ℹ️" };
+  const f = PRODUCT_STATUS[from] || { label: from || "غير معروفة", emoji: "ℹ️" };
+  return embed(`${t.emoji} ${t.label} — ${product.name}`, [
+    `**المنتج:** #${product.id} ${product.name}`,
+    `**الحالة:** ${t.emoji} ${t.label}`,
+    from && from !== to ? `**السابقة:** ${f.emoji} ${f.label}` : "",
+    `**السعر:** ${formatPrice(product.price, product.currency)}`,
+    `**غيّره:** ${by}`,
+  ].filter(Boolean).join("\n"));
+}
+
+async function postProductStatus(guild, product, from, to, by) {
+  // لو الروم غير محدد يرجع false بصمت — التغيير نفسه يظل محفوظاً في القاعدة
+  return sendToConfiguredChannel(guild, "productStatus", { embeds: [productStatusEmbed(product, from, to, by)] }).catch(() => false);
 }
 
 // ─────────── تأكيد طلب: يعطي الرول وينبّه روم الطلبات ───────────
@@ -830,7 +858,10 @@ client.on(Events.InteractionCreate, async interaction => {
         const status = interaction.options.getString("status", true);
         const product = db.prepare("SELECT * FROM products WHERE id=?").get(id);
         if (!product) return interaction.reply({ content: "Product not found.", ephemeral: true });
+        const before = product.status;
         db.prepare("UPDATE products SET status=? WHERE id=?").run(status, id);
+        // روم حالة المنتجات: رسالة لكل تغيير حالة فقط — لو الحالة كما هي ما نكتب شي
+        if (before !== status) await postProductStatus(interaction.guild, product, before, status, interaction.user);
         return interaction.reply({ content: `Updated **${product.name}** status to **${status}**.`, ephemeral: true });
       }
       if (commandName === "product-panel") {
@@ -1237,6 +1268,7 @@ client.on(Events.InteractionCreate, async interaction => {
       "d7_ch_reviews":    { key: "reviews",          section: channelsSection },
       "d7_welcome_ch":    { key: "welcome",          section: channelsSection },
       "d7_order_ch":      { key: "orders",           section: ordersSection },
+      "d7_prod_status_ch": { key: "productStatus",   section: ordersSection },
       "d7_ratings_ch":    { key: "reviews",          section: ratingsSection },
       "d7_pcheck_ch":     { key: "purchaseChecks",   section: ratingsSection },
     };

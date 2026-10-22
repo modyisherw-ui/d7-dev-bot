@@ -1229,8 +1229,18 @@ client.on(Events.InteractionCreate, async interaction => {
       if (approved) {
         const target = await interaction.client.users.fetch(check.user_id).catch(() => null);
         if (target && !target.bot) dmSent = await ratings.sendPurchaseDM(target, product, interaction.client, interaction.guild);
-        // موافقة يدوية على منحة = شراء مكتمل — هذا هو المسار الذي لم يكن ينشر أبداً
-        if (product) await postPurchaseFeed(interaction.guild, product, check.user_id, { approvedBy: interaction.user.id });
+        // الموافقة = تصريح الموظف إن هذا شراء حقيقي، فتُسجَّل كطلب قائم بعدها
+        // يُتابَع (تسليم / إلغاء) — مو تسجيل يمرّ بلا أثر ولا أثر يُدرَك.
+        // الحالة تبدأ 'confirmed' مباشرة لأن التأكيد وقع الآن، ولا يُنتظر
+        // تأكيد ثانٍ من لوحة الطلبات على شراء سبق ووافق عليه موظف.
+        if (product) {
+          const ins = db.prepare("INSERT INTO orders (guild_id,user_id,product_id,status,confirmed_at,confirmed_by) VALUES (?,?,?,'confirmed',CURRENT_TIMESTAMP,?)").run(interaction.guild.id, check.user_id, Number(product.id), interaction.user.id);
+          const orderId = Number(ins.lastInsertRowid);
+          await postPurchaseFeed(interaction.guild, product, check.user_id, { approvedBy: interaction.user.id, orderId });
+          // رسالة حالة الطلب في رومها الخاص — نفس ما يفعله زر Buy بعد التأكيد
+          const order = orderForFeed(orderId);
+          if (order) await postOrderFeed(interaction.guild, order);
+        }
       }
       // نحدّث الرسالة نفسها: نخفي الأزرار ونوضح النتيجة
       if (check.message_id && interaction.channel?.messages) {

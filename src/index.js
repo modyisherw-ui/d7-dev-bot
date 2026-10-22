@@ -341,7 +341,10 @@ function ordersSection() {
   // ⬇️ سجل الطلبات: كل طلب وكل تغيير حالة ينزل برسالته الخاصة
   // ملاحظة: الـ placeholder يظهر فقط لما ما يكون فيه روم محفوظ —
   // ولو كان محفوظاً يظهر اسمه داخل القائمة مكانها، عشان كذا نذكره في نص الرسالة.
-  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_ch", "orders", "📋 Pick the order log channel")));
+  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_ch", "orders", "🛒 Pick the purchase log channel")));
+  // ⬇️ روم حالة الطلب: منفصل عن روم تسجيل الشراء عشان كل روم وظيفته وحدة —
+  // روم الشراء يسجّل إن الرتبة طلعت، وروم الحالة يتابع الطلب للنهاية.
+  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_status_ch", "orderStatus", "🚚 Pick the order status channel")));
   // ⬇️ روم حالة المنتجات: /product-edit ينزل فيه رسالة لكل تغيير حالة
   // (بلا روم محفوظ يظهر الـ placeholder، عشان يبان من أول مرة)
   rows.push(new ActionRowBuilder().addComponents(channelRow("d7_prod_status_ch", "productStatus", "🔄 Pick the product status channel")));
@@ -357,7 +360,8 @@ function ordersSection() {
     desc,
     "",
     "Confirm payment from the menu above; the customer is granted the product role automatically.",
-    `**📋 Order log: ${chLabel("orders")}** — set by the menu below. Every confirmation, delivery or cancellation posts a new message with the order status.`,
+    `**🛒 Purchase log: ${chLabel("orders")}** — set by the menu below. Every purchase posts a message with the role, buyer and price.`,
+    `**🚚 Order status: ${chLabel("orderStatus")}** — set by the menu below. Every confirmation, delivery or cancellation posts a new message with the order status.`,
     `**🔄 Product status: ${chLabel("productStatus")}** — set by the menu below. Every product status change posts a message.`,
   ].join("\n"))], components: rows.slice(0, 5) };
 }
@@ -569,8 +573,13 @@ function orderForFeed(id) {
 }
 
 async function postOrderFeed(guild, order, extra) {
-  // لو الروم مش منضبط ما نفشل العملية كلها — الإشعار مكمّل مو أساسي
-  return sendToConfiguredChannel(guild, "orders", { embeds: [orderFeedEmbed(order, extra)] }).catch(() => false);
+  // روم منفصل عن روم تسجيل الشراء: رسالة الشراء تسجّل الحدوث،
+  // وهذي تتابع حالة الطلب (مؤكد / تم تسليمه / ملغى) — ما نخلطهم في مكان واحد.
+  // ولو لم يُضبط روم الحالة بعد نرجع لروم الشراء بدل أن نفقد الرسالة:
+  // إسقاطها بصمت أسوأ من أن تظهر في الروم المشترك، وهذا بالضبط ما حدث
+  // سابقاً مع روم لم يكن في الكاش — الإشعار اختفى ولم يعترض أحد.
+  const key = safeChannelId(config.channels?.orderStatus) ? "orderStatus" : "orders";
+  return sendToConfiguredChannel(guild, key, { embeds: [orderFeedEmbed(order, extra)] }).catch(() => false);
 }
 
 // ─────────── "شراء جديد" — نفس الشكل للمسارين ───────────
@@ -584,26 +593,17 @@ function purchaseFeedEmbed(product, buyerId, opts = {}) {
   // بدون هذي المطابقة يظهر اسم المنتج بدل الرتبة في أحد المسارين بصمت.
   const roleId = product?.role_id || product?.roleId || "";
   const roleMention = roleId ? `<@&${roleId}>` : (product?.name || "Unknown");
-  // المسار الأول طلب جديد → معلّق. المسار الثاني موافقة يدوية → مؤكد.
-  const statusAr = opts.approvedBy ? "✅ تم التأكيد" : "⏳ بانتظار التأكيد";
-  const lines = [
+  // رسالة تسجيل شراء فقط: هل وصلت الرتبة للشخص بالغلط ولا اشتراها فعلاً؟
+  // حالة الطلب مو هنا — لها رسالة منفصلة في رومها الخاص (postOrderFeed)
+  // لأن الوظيفتين مختلفتين: وحدة تسجّل حدوث شراء، والثانية تتابع تقدّم الطلب.
+  return embed("🛒 New purchase", [
     `**Product**\n${roleMention}`,
     `**Buyer:**\n<@${buyerId}>`,
     `**Price:** ${formatPrice(product.price, product.currency)}`,
     opts.orderId ? `**Order:** #${opts.orderId}` : "",
-    // فاصل بصري قبل الحالة، بس ما نبي سطور فاضية زايدة
-    "SPLIT",
-    `**حالة الطلب:** ${statusAr}`,
     opts.approvedBy ? `**Admin:** <@${opts.approvedBy}>` : "",
     opts.note ? `**Note:** ${opts.note}` : "",
-  ].filter(Boolean);
-  // نحذف الفاصل إذا ما بعده شي، ونفكّه لسطر فاضي
-  const out = [];
-  for (const l of lines) {
-    if (l === "SPLIT") { if (out.length) out.push(""); continue; }
-    out.push(l);
-  }
-  return embed("🛒 New purchase", out.join("\n"));
+  ].filter(Boolean).join("\n"));
 }
 
 async function postPurchaseFeed(guild, product, buyerId, opts) {
@@ -1319,6 +1319,7 @@ client.on(Events.InteractionCreate, async interaction => {
       "d7_ch_reviews":    { key: "reviews",          section: channelsSection },
       "d7_welcome_ch":    { key: "welcome",          section: channelsSection },
       "d7_order_ch":      { key: "orders",           section: ordersSection },
+      "d7_order_status_ch": { key: "orderStatus",    section: ordersSection },
       "d7_prod_status_ch": { key: "productStatus",   section: ordersSection },
       "d7_ratings_ch":    { key: "reviews",          section: ratingsSection },
       "d7_pcheck_ch":     { key: "purchaseChecks",   section: ratingsSection },

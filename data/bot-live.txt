@@ -62,3 +62,4 @@ S2A DEV bot online as S2A Dev#6918
 (node:2213) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
 (Use `node --trace-warnings ...` to show where the warning was created)
 S2A DEV bot online as S2A Dev#6918
+S2A DEV bot online as S2A Dev#6918

@@ -572,14 +572,71 @@ function orderForFeed(id) {
   return db.prepare("SELECT o.*, p.name, p.role_id, p.price, p.currency FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=?").get(id) || null;
 }
 
+// ─────────── أزرار تغيير حالة الطلب، داخل رسالة الحالة نفسها ───────────
+// الترتيب ترتيب مرحلة الدورة لا ترتيب كتابة الطلب: معلق ← قيد التنفيذ ←
+// تم التنفيذ، والإلغاء بجانبها. الزر المطابق للحالة الحالية معطّل: يبيّن
+// أين الطلب الآن، ويمنع ضغطة لا تغيّر شيئاً.
+const ORDER_STATUS_ACTIONS = [
+  { key: "pending",   label: "⏳ معلق",        style: ButtonStyle.Secondary },
+  { key: "confirmed", label: "🚀 قيد التنفيذ", style: ButtonStyle.Primary },
+  { key: "delivered", label: "✅ تم التنفيذ",  style: ButtonStyle.Success },
+  { key: "cancelled", label: "❌ ملغى",         style: ButtonStyle.Danger },
+];
+
+function statusPayload(order, extra) {
+  return { embeds: [orderFeedEmbed(order, extra)], components: statusRows(order) };
+}
+
+function statusRows(order) {
+  return [new ActionRowBuilder().addComponents(ORDER_STATUS_ACTIONS.map(a =>
+    new ButtonBuilder()
+      .setCustomId(`d7_order_status:${order.id}:${a.key}`)
+      .setLabel(a.label)
+      .setStyle(a.style)
+      .setDisabled(order.status === a.key)))];
+}
+
+// الكتابة نفسها يستعملها الزر والأمر — حتى لا يختلف أثر الضغطة عن أثر الأمر
+function setOrderStatus(order, next, staffId) {
+  const id = order.id;
+  if (next === "confirmed") {
+    // COALESCE: تأكيد ثانٍ ما يمسح وقت التأكيد الأول ولا مَن قام به
+    db.prepare("UPDATE orders SET status='confirmed',confirmed_at=COALESCE(confirmed_at,CURRENT_TIMESTAMP),confirmed_by=COALESCE(NULLIF(confirmed_by,''),?) WHERE id=?").run(staffId || "", id);
+  } else if (next === "delivered") {
+    const now = Date.now();
+    const start = order.confirmed_at ? new Date(String(order.confirmed_at).replace(" ", "T") + "Z").getTime() : now;
+    db.prepare("UPDATE orders SET status='delivered',delivered_at=CURRENT_TIMESTAMP,delivery_seconds=? WHERE id=?").run(Math.max(0, Math.floor((now - start) / 1000)), id);
+  } else if (next === "cancelled") {
+    db.prepare("UPDATE orders SET status='cancelled' WHERE id=?").run(id);
+  } else {
+    db.prepare("UPDATE orders SET status='pending' WHERE id=?").run(id);
+  }
+  order.status = next;
+  return order;
+}
+
 async function postOrderFeed(guild, order, extra) {
+  // رسالة واحدة لكل طلب تتبدّل في مكانها. لو نشرنا رسالة جديدة مع كل تغيير
+  // لتكدّست الرسائل ولضغط الموظف زراً في رسالة قديمة بحالة قديمة.
   // روم منفصل عن روم تسجيل الشراء: رسالة الشراء تسجّل الحدوث،
   // وهذي تتابع حالة الطلب (مؤكد / تم تسليمه / ملغى) — ما نخلطهم في مكان واحد.
   // ولو لم يُضبط روم الحالة بعد نرجع لروم الشراء بدل أن نفقد الرسالة:
   // إسقاطها بصمت أسوأ من أن تظهر في الروم المشترك، وهذا بالضبط ما حدث
   // سابقاً مع روم لم يكن في الكاش — الإشعار اختفى ولم يعترض أحد.
   const key = safeChannelId(config.channels?.orderStatus) ? "orderStatus" : "orders";
-  return sendToConfiguredChannel(guild, key, { embeds: [orderFeedEmbed(order, extra)] }).catch(() => false);
+  const channel = channelFromConfig(guild, key);
+  if (!channel?.isTextBased()) return false;
+  const payload = statusPayload(order, extra);
+  // نحدّث الرسالة إن عرفنا عنوانها — وإن لم تعد موجودة ننشر غيرها ونحدّث المؤشر
+  if (order.status_msg_id && channel.messages?.fetch) {
+    const old = await channel.messages.fetch(order.status_msg_id).catch(() => null);
+    if (old) return !!(await old.edit(payload).catch(() => null));
+  }
+  const sent = await channel.send(payload).catch(() => null);
+  if (!sent) return false;
+  order.status_msg_id = String(sent.id);
+  db.prepare("UPDATE orders SET status_msg_id=? WHERE id=?").run(order.status_msg_id, order.id);
+  return true;
 }
 
 // ─────────── "شراء جديد" — نفس الشكل للمسارين ───────────
@@ -603,7 +660,9 @@ function purchaseFeedEmbed(product, buyerId, opts = {}) {
     opts.orderId ? `**Order:** #${opts.orderId}` : "",
     opts.approvedBy ? `**Admin:** <@${opts.approvedBy}>` : "",
     opts.note ? `**Note:** ${opts.note}` : "",
-  ].filter(Boolean).join("\n"));
+    // سطر فاضي بين المجموعات: كل حقل مجموعة (وسطر القيمة تحته)،
+    // والحقول المكدّسة بدون فاصل تُقرأ سطراً واحداً طويلاً لا قائمة
+  ].filter(Boolean).join("\n\n"));
 }
 
 async function postPurchaseFeed(guild, product, buyerId, opts) {
@@ -1254,6 +1313,36 @@ client.on(Events.InteractionCreate, async interaction => {
       ];
       if (approved && !dmSent) lines.push("⚠️ Could not DM the rating message — the member may have DMs closed.");
       return interaction.reply({ content: lines.join("\n"), ephemeral: true });
+    }
+
+    // ─────────── تغيير حالة الطلب من الأزرار داخل رسالة الحالة ───────────
+    if (interaction.isButton() && interaction.customId.startsWith("d7_order_status:")) {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const [, rawOrder, next] = interaction.customId.split(":");
+      const order = orderForFeed(Number(rawOrder));
+      const act = ORDER_STATUS_ACTIONS.find(a => a.key === next);
+      if (!order || !act) return interaction.reply({ content: "Order not found.", ephemeral: true });
+      if (order.status === next) return interaction.reply({ content: `Order #${order.id} is already **${act.label}**.`, ephemeral: true });
+
+      // قيد التنفيذ = تأكيد الدفع = تسليم الرتبة، زي ما يفعل /order-confirm
+      if (next === "confirmed" && order.role_id) {
+        preApprove(order.user_id, order.product_id);
+        const member = await interaction.guild.members.fetch(order.user_id).catch(() => null);
+        if (member) await member.roles.add(order.role_id, `S2A DEV order #${order.id} confirmed`).catch(() => {});
+      }
+      setOrderStatus(order, next, interaction.user.id);
+
+      const fresh = orderForFeed(order.id) || order;
+      // الرسالة التي فيها الزر هي المرجع — نحدّث مؤشرها حتى يبقى الزر
+      // والرسالة متطابقين، ولو سبق وأُنشئت رسالة أخرى صار هذا هو الجديدة
+      if (interaction.message?.id) {
+        fresh.status_msg_id = String(interaction.message.id);
+        db.prepare("UPDATE orders SET status_msg_id=? WHERE id=?").run(fresh.status_msg_id, order.id);
+      }
+      // update() تعترف بالضغط وتعدّل الرسالة في مكانها — هذا هو المطلوب
+      await interaction.update(statusPayload(fresh)).catch(() => {});
+      await refreshAdminDashboard(interaction.guild);
+      return;
     }
 
     // ─────────── اختيار رتبة المنتج ثم السعر ثم الاسم ───────────

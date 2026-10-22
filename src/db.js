@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS orders (
   rating INTEGER DEFAULT NULL,
   review TEXT DEFAULT '',
   confirmed_by TEXT DEFAULT '',
+  status_msg_id TEXT DEFAULT '',
   FOREIGN KEY(product_id) REFERENCES products(id)
 );
 CREATE TABLE IF NOT EXISTS tickets (
@@ -107,6 +108,14 @@ CREATE TABLE IF NOT EXISTS purchase_checks (
   decided_at TEXT DEFAULT NULL
 );
 `);
+
+// زر الحالة داخل رسالة الحالة يحتاج معرفة عنوان الرسالة لتعديلها في مكانها.
+// نضيف عموداً لا نعيد بناء الجدول: الطلبات بيانات لا تُستعاد إن سقطت.
+const orderCols = db.prepare(`PRAGMA table_info(orders)`).all();
+if (!orderCols.some(c => c.name === "status_msg_id")) {
+  console.log("Migrating orders table: adding status_msg_id…");
+  db.exec(`ALTER TABLE orders ADD COLUMN status_msg_id TEXT DEFAULT ''`);
+}
 
 // ═══════════════ Tickets (numbered, one channel per ticket) ═══════════════
 db.tickets = {

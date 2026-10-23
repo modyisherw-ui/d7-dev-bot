@@ -143,6 +143,19 @@ async function handleCommentModal(interaction) {
 
   db.ratings.add({ guildId, productId: pid, userId: interaction.user.id, stars, comment });
 
+  // تقييم العميل يُسجَّل على طلبه هو — آخر طلب مؤكَّد أو مسلَّم لهذا المنتج —
+  // حتى تظهر النجمة في سجل الطلبات وفي رسالة حالة الطلب. هذه الوصلة كانت
+  // مقطوعة: زر product_rate الذي كان يكتب التقييم في الطلب لا يبنيه أحد
+  // أصلاً، فبقي orders.rating فارغاً مهما تقيّم العميل وظهر "no rating" دائماً.
+  // داخل try: فشل هذا لا يجب أن يمنع ردّ النافذة وإلا انتهى وقت التفاعل.
+  try {
+    const pidKey = Number.isFinite(Number(pid)) ? Number(pid) : String(pid);
+    const oid = db.prepare(`SELECT id FROM orders WHERE user_id=? AND product_id=? AND status IN ('confirmed','delivered') ORDER BY id DESC LIMIT 1`).get(interaction.user.id, pidKey);
+    if (oid) db.prepare("UPDATE orders SET rating=?, review=? WHERE id=?").run(stars, comment, oid.id);
+  } catch (e) {
+    console.warn("تعذّر كتابة تقييم العميل على الطلب: " + e.message);
+  }
+
   await interaction.reply({
     content: ar ? "✅ شكراً على تقييمك! ⭐" : "✅ Thank you for your rating! ⭐",
     ephemeral: true,

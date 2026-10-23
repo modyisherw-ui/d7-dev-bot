@@ -109,6 +109,18 @@ function productDeleteRows() {
       .setValue(String(p.id)))))];
 }
 
+// قائمة اختيار الطلب المراد حذفه (تظهر بعد ضغط زر الحذف)
+function orderDeleteRows() {
+  const orders = db.prepare(`SELECT o.id,o.user_id,o.status,p.name product_name FROM orders o JOIN products p ON p.id=o.product_id ORDER BY o.id DESC LIMIT 25`).all();
+  if (!orders.length) return null;
+  return [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+    .setCustomId("d7_order_del_sel").setPlaceholder("Select the order to delete permanently...").setMinValues(1).setMaxValues(1)
+    .addOptions(orders.map(o => new StringSelectMenuOptionBuilder()
+      .setLabel(`#${o.id} — ${o.product_name}`.slice(0, 100))
+      .setDescription(`${o.status} • buyer ${o.user_id}`.slice(0, 100))
+      .setValue(String(o.id)))))];
+}
+
 // ردّ على رسالة اللوحة نفسها متى أمكن (حتى لا تبقى الشاشة القديمة عالقة)
 function respondWith(interaction, payload) {
   if (interaction.message && !interaction.replied && !interaction.deferred) {
@@ -244,14 +256,16 @@ function welcomeSection(statusText) {
     new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_store", w.storeChannelId, `🏪 Store channel — ${w.storeChannelId ? `<#${w.storeChannelId}>` : "Not set"}`)),
     new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_help", w.helpChannelId, `🆘 Help channel (Need Help) — ${w.helpChannelId ? `<#${w.helpChannelId}>` : "Not set"}`)),
     new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_releases", w.releasesChannelId, `🚀 Latest Releases channel — ${w.releasesChannelId ? `<#${w.releasesChannelId}>` : "Not set"}`)),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("panel:welcome:send").setLabel("📨 Send welcome message").setStyle(ButtonStyle.Primary),
-    ),
+    // ⬇️ خمسة صفوف فقط — هذا حد ديسكورد في الرسالة ولا يُتجاوز.
+    // القسم كان ستة صفوف (زر الإرسال في صف مفرد)، ورسالة بستة صفوف تُرفض
+    // بـ 400 قبل أن يصل ردّ البوت أصلاً، فتظهر للمستخدم:
+    // "S2A DEV didn't respond in time". زر الصورة اندمج في نافذة النص
+    // كحقل رابط اختياري حتى يتسع الصف لزر الإرسال.
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("panel:welcome:toggle").setLabel(w.enabled === false ? "❌ Welcome: off" : "✅ Welcome: on").setStyle(w.enabled === false ? ButtonStyle.Danger : ButtonStyle.Success),
       new ButtonBuilder().setCustomId("panel:welcome:mode").setLabel(w.sendDM === false ? "🗨️ Send: welcome channel" : "📨 Send: member DM").setStyle(w.sendDM === false ? ButtonStyle.Secondary : ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("panel:welcome:text").setLabel("✏️ Text & title").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("panel:welcome:image").setLabel("🖼️ Image").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel:welcome:text").setLabel("✏️ Text & image").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel:welcome:send").setLabel("📨 Send welcome message").setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
     ),
   ];
@@ -351,8 +365,19 @@ function ticketDeleteRows() {
   return rows;
 }
 
-// ─────────── قسم الطلبات (مع اختيار روم إرسال الطلبات) ───────────
-function ordersSection() {
+// ─────────── قسم الطلبات: إحصاءات + حذف + اختيار الرومات ───────────
+function ordersSection(statusText) {
+  // عدّاد لكل حالة — طلب الصاحب: كم طلب موجود، وكم مكتمل/ملغي/قيد التنفيذ/بانتظار التأكيد
+  const counts = { pending: 0, confirmed: 0, delivered: 0, cancelled: 0 };
+  for (const r of db.prepare("SELECT status, COUNT(*) n FROM orders GROUP BY status").all()) {
+    if (Object.prototype.hasOwnProperty.call(counts, r.status)) counts[r.status] = Number(r.n);
+  }
+  const total = counts.pending + counts.confirmed + counts.delivered + counts.cancelled;
+  const stats = [
+    `**Total orders:** ${total}`,
+    `⏳ **Pending confirmation:** ${counts.pending} · 🚀 **In progress:** ${counts.confirmed}`,
+    `✅ **Completed:** ${counts.delivered} · ❌ **Cancelled:** ${counts.cancelled}`,
+  ].join("\n");
   const rowsData = db.prepare(`SELECT o.*,p.name product_name,p.price,p.currency FROM orders o JOIN products p ON p.id=o.product_id ORDER BY o.id DESC LIMIT 10`).all();
   const desc = rowsData.length
     ? rowsData.map(o => `**#${o.id}** · ${o.product_name} · <@${o.user_id}> · **${o.status}** · ${formatPrice(o.price,o.currency)}\n⭐ ${o.rating ? `${o.rating}/5` : "no rating"}`).join("\n")
@@ -378,6 +403,8 @@ function ordersSection() {
   // (بلا روم محفوظ يظهر الـ placeholder، عشان يبان من أول مرة)
   rows.push(new ActionRowBuilder().addComponents(channelRow("d7_prod_status_ch", "productStatus", "🔄 Pick the product status channel")));
   rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("panel:orders:del").setLabel("🗑️ Delete Order").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId("panel:orders:delall").setLabel("⚠️ Delete All").setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId("panel:orders").setLabel("🔄 Refresh").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary)
   ));
@@ -385,14 +412,23 @@ function ordersSection() {
   // فتصير القائمتين متشابهتين تماماً ولا يعرف أحد أي واحدة لأي غرض.
   // عشان كذا نكتب الروم باسمه في نص الرسالة فوق القائمتين — هذا حصل فعلاً:
   // المستخدم ضبط روم حالة المنتجات وظن أن الطلبات ستصله.
-  return { embeds: [embed("🧾 Orders", [
-    desc,
-    "",
-    "Confirm payment from the menu above; the customer is granted the product role automatically.",
-    `**🛒 Purchase log: ${chLabel("orders")}** — set by the menu below. Every purchase posts a message with the role, buyer and price.`,
-    `**🚚 Order status: ${chLabel("orderStatus")}** — set by the menu below. Every confirmation, delivery or cancellation posts a new message with the order status.`,
-    `**🔄 Product status: ${chLabel("productStatus")}** — set by the menu below. Every product status change posts a message.`,
-  ].join("\n"))], components: rows.slice(0, 5) };
+  return {
+    content: statusText || undefined,
+    embeds: [embed("🧾 Orders", [
+      stats,
+      "",
+      "**Recent orders:**",
+      desc,
+      "",
+      "Confirm payment from the menu above; the customer is granted the product role automatically.",
+      `**🛒 Purchase log: ${chLabel("orders")}** — set by the menu below. Every purchase posts a message with the role, buyer and price.`,
+      `**🚚 Order status: ${chLabel("orderStatus")}** — set by the menu below. Every confirmation, delivery or cancellation updates one status message per order.`,
+      `**🔄 Product status: ${chLabel("productStatus")}** — set by the menu below. Every product status change posts a message.`,
+    ].join("\n"))],
+    // خمسة صفوف كحد أقصى (حد ديسكورد) — وزر الحذف جاء في صف الأزرار
+    // الموجود لا في صف جديد، حتى لا يتعدى القسم الحد المسموح
+    components: rows.slice(0, 5),
+  };
 }
 
 // ─────────── قسم التقييمات (نسخة من NSR Hub) ───────────
@@ -582,10 +618,12 @@ const ORDER_STATUS = {
 // order لازم يجي معه name / role_id / price / currency / user_id / status
 function orderFeedEmbed(order, extra = {}) {
   const st = ORDER_STATUS[order.status] || { label_ar: order.status || "غير معروفة", emoji: "ℹ️" };
-  // طلب صريح: سطر التقييم يبقى «لم يتم التقييم» مهما كان في الجدول.
-  // التقييم يعيش في نظام التقييمات ويبقى له وقته ومكانه، ورسالة الحالة
-  // تصف حالة الطلب لا رأي العميل — سطر واحد لا يتبدّل بآخر.
-  const rating = "لم يتم التقييم";
+  // تاريخ هذا السطر: جمّدناه بأمر الصاحب ثم رجعناه بأمره الأخير — لما علم
+  // أن الوصلة التي تُوصل التقييم للطلب كانت مقطوعة (زر product_rate لا يبنيه
+  // أحد) فلم يصل التقييم أصلاً لا مكان. الوصلة أُصلحت الآن: التقييم يصل صف
+  // الطلب عند تقييم العميل ويظهر مع أول رسالة حالة بعده، وما لم يصل بعد
+  // يبقى «لم يتم التقييم» صراحةً لا تخميناً.
+  const rating = order.rating ? `⭐ ${order.rating}/5` : "لم يتم التقييم";
   // رتبة المنتج بدل اسمه: الرتبة هي ما يحمله المشتري فعلاً، والاسم يتكرر معها
   // وحالة الطلب آخر سطر — آخر ما يقع عليه النظر بعد بقية التفاصيل
   return embed(`🛒 طلب #${order.id}`, [
@@ -602,6 +640,16 @@ function orderFeedEmbed(order, extra = {}) {
 // يجيب الطلب مع بيانات منتجه حتى يقدر يبني إيمبد السجل
 function orderForFeed(id) {
   return db.prepare("SELECT o.*, p.name, p.role_id, p.price, p.currency FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=?").get(id) || null;
+}
+
+// حذف رسالة حالة الطلب من الروم — حذف الصف وحده لا يكفي: تبقى الرسالة
+// على أزرارها وتشير لطلب لم يعد موجوداً، فيجب أن تُحذف معه
+async function removeOrderStatusMessage(guild, order) {
+  if (!order?.status_msg_id) return;
+  const key = safeChannelId(config.channels?.orderStatus) ? "orderStatus" : "orders";
+  const channel = channelFromConfig(guild, key);
+  const msg = channel?.messages?.fetch ? await channel.messages.fetch(order.status_msg_id).catch(() => null) : null;
+  if (msg) await msg.delete().catch(() => {});
 }
 
 // ─────────── أزرار تغيير حالة الطلب، داخل رسالة الحالة نفسها ───────────
@@ -1180,7 +1228,55 @@ client.on(Events.InteractionCreate, async interaction => {
             components: rows,
           });
         }
-        if (section === "orders") return interaction.update(ordersSection());
+        if (section === "orders") {
+          const flag = parts[1];
+          if (flag === "del") {
+            const delRows = orderDeleteRows();
+            if (!delRows) return interaction.reply({ content: "There are no orders to delete.", ephemeral: true });
+            return interaction.update({
+              embeds: [embed("🗑️ Delete Order", "**Pick an order from the menu below.**\n⚠️ Deletion is permanent — the order **and its status message** are removed.")],
+              components: [...delRows, new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId("panel:orders").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+              )],
+            });
+          }
+          if (flag === "delall") {
+            const n = Number(db.prepare("SELECT COUNT(*) c FROM orders").get().c);
+            if (!n) return interaction.reply({ content: "There are no orders to delete.", ephemeral: true });
+            // خطوتان لا واحدة: مسح كل السجل خطوة لا رجعة فيها، فلا يُنفَّذ
+            // بضغطة واحدة سهو — نفس فكرة "اضغط مرتين للتأكيد"
+            return interaction.update({
+              embeds: [embed("⚠️ Delete ALL orders?", [
+                `This permanently deletes **${n} order(s)** and their status messages.`,
+                "Numbering restarts at **#1** after the wipe.",
+                "",
+                "Press **Confirm** to proceed — or **Cancel** to go back.",
+              ].join("\n"))],
+              components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId("panel:orders:wipe").setLabel(`⚠️ Confirm — delete ${n} orders`).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId("panel:orders").setLabel("Cancel").setStyle(ButtonStyle.Secondary),
+              )],
+            });
+          }
+          if (flag === "wipe") {
+            const all = db.prepare("SELECT * FROM orders WHERE status_msg_id<>''").all();
+            // الصفوف أولاً (محلي، أ milliseconds) ثم الردّ ثم شبكة الحذف —
+            // لو عكسنا الترتيب لتجمّد الرد وراء ثلاثين جلب رسالة وانتهت المهلة
+            db.prepare("DELETE FROM orders").run();
+            db.prepare("DELETE FROM sqlite_sequence WHERE name='orders'").run();
+            await respondWith(interaction, ordersSection("✅ All orders deleted — numbering restarts at #1.")).catch(() => {});
+            const key = safeChannelId(config.channels?.orderStatus) ? "orderStatus" : "orders";
+            const channel = channelFromConfig(interaction.guild, key);
+            if (channel?.messages?.fetch) {
+              for (const o of all.slice(0, 30)) {
+                const m = await channel.messages.fetch(o.status_msg_id).catch(() => null);
+                if (m) await m.delete().catch(() => {});
+              }
+            }
+            return;
+          }
+          return interaction.update(ordersSection());
+        }
         if (section === "tickets") return interaction.update(ticketsSection());
         if (section === "channels") return interaction.update(channelsSection());
         if (section === "ratings") return interaction.update(ratingsSection());
@@ -1244,6 +1340,11 @@ client.on(Events.InteractionCreate, async interaction => {
               new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("title").setLabel("Title (Welcome to ...)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256).setValue(String(w.title || ""))),
               new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("body").setLabel("Body").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000).setValue(String(w.message || ""))),
               new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("footer").setLabel("Footer under the image (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(200).setValue(String(w.footer || ""))),
+              // حقل الصورة انتقل إلى هنا (كانت نافذة مستقلة) — حذفنا زرها
+              // من اللوحة ليخترق صف الأزرار الخمسة الذي حدّه ديسكورد
+              new ActionRowBuilder().addComponents(// تسمية الحقل 45 حرفاً كحد أقصى عند ديسكورد — الوصف الأطول كان يُفشل النافذة
+              // كلها بـ ExpectedConstraintError قبل أن تُفتح أصلاً
+              new TextInputBuilder().setCustomId("url").setLabel("Image URL (optional — keeps current)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500).setValue(String(w.imageUrl || ""))),
             );
             return interaction.showModal(modal);
           }
@@ -1431,6 +1532,20 @@ client.on(Events.InteractionCreate, async interaction => {
       db.prepare("DELETE FROM purchase_checks WHERE product_id=?").run(String(id));
       db.prepare("DELETE FROM products WHERE id=?").run(id);
       return respondWith(interaction, { ...productsSection(), content: `🗑️ Deleted product **${product.name}** permanently.` });
+    }
+
+    // ─────────── حذف طلب نهائياً ───────────
+    if (interaction.isStringSelectMenu() && interaction.customId === "d7_order_del_sel") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const id = Number(interaction.values[0]);
+      const order = db.prepare("SELECT * FROM orders WHERE id=?").get(id);
+      if (!order) return interaction.reply({ content: `❌ Order #${id} no longer exists.`, ephemeral: true });
+      // الصف يُحذف أولاً (محلي، فوري) حتى تظهر الإحصاءات صحيحة في الرد،
+      // ثم الردّ، ثم رسالة الحالة في الروم — الشبكة بعد لا قبل الرد
+      db.prepare("DELETE FROM orders WHERE id=?").run(id);
+      await respondWith(interaction, ordersSection(`🗑️ Deleted order **#${id}** — its status message is being removed too.`)).catch(() => {});
+      await removeOrderStatusMessage(interaction.guild, order).catch(() => {});
+      return;
     }
 
     // ─────────── اختيار روم نشر المنتجات ───────────
@@ -1691,6 +1806,10 @@ client.on(Events.InteractionCreate, async interaction => {
         config.welcome.title = interaction.fields.getTextInputValue("title").trim() || "Welcome!";
         config.welcome.message = interaction.fields.getTextInputValue("body").trim();
         config.welcome.footer = interaction.fields.getTextInputValue("footer").trim();
+        // رابط فارغ أو غير صالح يُبقي الصورة الحالية — لا يمسحها صمتاً
+        // (سلوك نافذة الصورة القديمة نفسها)
+        const url = interaction.fields.getTextInputValue("url").trim();
+        if (/^https?:\/\//.test(url)) config.welcome.imageUrl = url;
         saveConfig();
         await interaction.reply({ content: "✅ Welcome message text saved.", ephemeral: true });
         return interaction.message?.edit(welcomeSection("✅ Text saved.")).catch(() => {});

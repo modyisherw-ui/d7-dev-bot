@@ -192,6 +192,31 @@ function welcomePayload() {
   return { embeds: [e] };
 }
 
+// ─────────── رسالة الترحيب المثبّتة (D7 Dev) ───────────
+// نص ثابت طلبه صاحب المتجر ويُرسله بنفسه من اللوحة إلى روم الترحيب.
+// لا علاقة له بنص الترحيب التلقائي القابل للتعديل: هذا إعلان تثبته أنت
+// متى شئت، وذاك ما يصل للعضو لحظة انضمامه. فصلُهما يمنع أن يغيّر أحدٌ
+// نص الإعلان من على لوحة النص فتفقد الرسالة المنشورة معناها.
+const WELCOME_INTRO = {
+  title: "✦ Welcome to D7 Dev",
+  lines: [
+    "Welcome to **D7 Dev** — where creativity meets precision.",
+    "Explore premium FiveM resources, OneSync solutions, and custom-developed scripts built to elevate your server experience.",
+    "**Innovate. Develop. Stand Out.**",
+    "We're glad to have you here. 💠",
+  ],
+};
+
+// حمولة رسالة الترحيب المثبّتة — نفس ما يُعرض في اللوحة وما يُنشر في الروم
+function welcomeIntroPayload() {
+  const e = new EmbedBuilder()
+    .setColor(EMBED_COLOR)
+    .setThumbnail(EMBED_THUMB)
+    .setTitle(WELCOME_INTRO.title)
+    .setDescription(WELCOME_INTRO.lines.join("\n\n"));
+  return { embeds: [e] };
+}
+
 function welcomeChannelRow(id, currentId, placeholder) {
   const sel = new ChannelSelectMenuBuilder()
     .setCustomId(id)
@@ -220,6 +245,9 @@ function welcomeSection(statusText) {
     new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_help", w.helpChannelId, `🆘 Help channel (Need Help) — ${w.helpChannelId ? `<#${w.helpChannelId}>` : "Not set"}`)),
     new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_releases", w.releasesChannelId, `🚀 Latest Releases channel — ${w.releasesChannelId ? `<#${w.releasesChannelId}>` : "Not set"}`)),
     new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("panel:welcome:send").setLabel("📨 Send welcome message").setStyle(ButtonStyle.Primary),
+    ),
+    new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("panel:welcome:toggle").setLabel(w.enabled === false ? "❌ Welcome: off" : "✅ Welcome: on").setStyle(w.enabled === false ? ButtonStyle.Danger : ButtonStyle.Success),
       new ButtonBuilder().setCustomId("panel:welcome:mode").setLabel(w.sendDM === false ? "🗨️ Send: welcome channel" : "📨 Send: member DM").setStyle(w.sendDM === false ? ButtonStyle.Secondary : ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("panel:welcome:text").setLabel("✏️ Text & title").setStyle(ButtonStyle.Secondary),
@@ -227,12 +255,13 @@ function welcomeSection(statusText) {
       new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
     ),
   ];
-  // المعاينة = رسالة الترحيب نفسها بالضبط
+  // المعاينة = ما ينشره زر الإرسال، ثم رسالة الترحيب التلقائية بالضبط
   const preview = welcomePayload();
   const meta = [
     `**Welcome channel (fallback):** ${chLabel("welcome")} — used if the member keeps DMs closed.`,
+    "📨 **Send welcome message** posts the **first** embed below in that channel. The second embed is the automatic message a joining member receives.",
   ];
-  return { content: [statusText, ...meta].filter(Boolean).join("\n"), embeds: preview.embeds, components: rows };
+  return { content: [statusText, ...meta].filter(Boolean).join("\n"), embeds: [...welcomeIntroPayload().embeds, ...preview.embeds], components: rows };
 }
 
 // ─────────── قسم التذاكر (مطابق لصورة لوحة تحكم NSR) ───────────
@@ -553,7 +582,10 @@ const ORDER_STATUS = {
 // order لازم يجي معه name / role_id / price / currency / user_id / status
 function orderFeedEmbed(order, extra = {}) {
   const st = ORDER_STATUS[order.status] || { label_ar: order.status || "غير معروفة", emoji: "ℹ️" };
-  const rating = order.rating ? `⭐ ${order.rating}/5` : "لم يتم التقييم";
+  // طلب صريح: سطر التقييم يبقى «لم يتم التقييم» مهما كان في الجدول.
+  // التقييم يعيش في نظام التقييمات ويبقى له وقته ومكانه، ورسالة الحالة
+  // تصف حالة الطلب لا رأي العميل — سطر واحد لا يتبدّل بآخر.
+  const rating = "لم يتم التقييم";
   // رتبة المنتج بدل اسمه: الرتبة هي ما يحمله المشتري فعلاً، والاسم يتكرر معها
   // وحالة الطلب آخر سطر — آخر ما يقع عليه النظر بعد بقية التفاصيل
   return embed(`🛒 طلب #${order.id}`, [
@@ -1222,6 +1254,16 @@ client.on(Events.InteractionCreate, async interaction => {
               new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("url").setLabel("Direct image URL shown under the message").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500).setValue(String(w.imageUrl || ""))),
             );
             return interaction.showModal(modal);
+          }
+          if (flag === "send") {
+            // رسالة ترحيب تُنشر بأمر الموظف لا بانضمام عضو — تذهب لروم الترحيب
+            // نفسه الذي تُنشر فيه رسالة الانضمام احتياطاً، فيبقى المحتوى في مكان واحد
+            const channel = channelFromConfig(interaction.guild, "welcome");
+            if (!channel?.isTextBased()) return interaction.reply({ content: "⚠️ Set the welcome channel first — **Channels** section → 👋 Welcome channel.", ephemeral: true });
+            const sent = await channel.send(welcomeIntroPayload()).catch(() => null);
+            return interaction.reply(sent
+              ? { content: `✅ The welcome message was posted in <#${channel.id}>.`, ephemeral: true }
+              : { content: "⚠️ Could not post it there — check that I can send messages in that channel.", ephemeral: true });
           }
           return interaction.update(welcomeSection());
         }

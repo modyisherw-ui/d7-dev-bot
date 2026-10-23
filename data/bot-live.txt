@@ -78,3 +78,90 @@ S2A DEV bot online as S2A Dev#6918
 (node:2673) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
 (Use `node --trace-warnings ...` to show where the warning was created)
 S2A DEV bot online as S2A Dev#6918
+(node:2398) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
+(Use `node --trace-warnings ...` to show where the warning was created)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+DiscordAPIError[50035]: Invalid Form Body
+data.components[BASE_TYPE_MAX_LENGTH]: Must be 5 or fewer in length.
+    at handleErrors (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/rest/dist/index.js:791:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async BurstHandler.runRequest (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/rest/dist/index.js:898:23)
+    at async _REST.request (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/rest/dist/index.js:1342:22)
+    at async ButtonInteraction.update (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:354:22)
+Emitted 'error' event on Client instance at:
+    at emitUnhandledRejectionOrErr (node:events:402:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+  rawError: {
+    message: 'Invalid Form Body',
+    code: 50035,
+    errors: {
+      data: { components: { _errors: [ [Object] ] } }
+    }
+  },
+  code: 50035,
+  status: 400,
+  method: 'POST',
+  url: 'https://discord.com/api/v10/interactions/1563202661820538900/aW50ZXJhY3Rpb246MTU2MzIwMjY2MTgyMDUzODkwMDpVUERCOWwybVpXN2VjdVdieW50ZUFjQjdheVNMcDlZNUZjT2U5c0x5V1lzb2E2ODFTeWMwWm9GbGhVVUxJTE84OFkzZkNLVXM1WE9pSjQwZ3BUZGdMUTF1d2NsRXFaMUtHYTJTQTBVQ25oQ3c5S0tnd28xVnJ3UjJ2aEpEdmVvRg/callback?with_response=false',
+  requestBody: {
+    files: [],
+    json: {
+      type: 7,
+      data: {
+        content: '**Welcome channel (fallback):** <#1561445389939253298> — used if the member keeps DMs closed.\n' +
+          '📨 **Send welcome message** posts the **first** embed below in that channel. The second embed is the automatic message a joining member receives.',
+        tts: false,
+        nonce: undefined,
+        enforce_nonce: false,
+        embeds: [
+          {
+            color: 3121914,
+            thumbnail: [Object],
+            title: '✦ Welcome to D7 Dev',
+            description: 'Welcome to **D7 Dev** — where creativity meets precision.\n' +
+              '\n' +
+              'Explore premium FiveM resources, OneSync solutions, and custom-developed scripts built to elevate your server experience.\n' +
+              '\n' +
+              '**Innovate. Develop. Stand Out.**\n' +
+              '\n' +
+              "We're glad to have you here. 💠"
+          },
+          {
+            color: 3121914,
+            thumbnail: [Object],
+            title: 'Welcome to S2A DEV!',
+            description: 'S2A DEV is a professional development studio specializing in high-quality FiveM scripts, modern UI designs, and innovative solutions built to enhance your server experience.\n' +
+              '▸ **Explore Our Store:** <#1561448618492301472>\n' +
+              '▸ **Need Help?:** <#1561449062564102144>\n' +
+              '▸ **Latest Releases:** <#1561446637233250424>',
+            footer: [Object]
+          }
+        ],
+        components: [
+          { type: 1, components: [Array] },
+          { type: 1, components: [Array] },
+          { type: 1, components: [Array] },
+          { type: 1, components: [Array] },
+          { type: 1, components: [Array] },
+          { type: 1, components: [Array] }
+        ],
+        username: undefined,
+        avatar_url: undefined,
+        allowed_mentions: undefined,
+        flags: undefined,
+        message_reference: undefined,
+        attachments: undefined,
+        sticker_ids: undefined,
+        thread_name: undefined,
+        applied_tags: undefined,
+        poll: undefined,
+        shared_client_theme: undefined
+      }
+    }
+  }
+}
+
+Node.js v22.23.3
+S2A DEV bot online as S2A Dev#6918

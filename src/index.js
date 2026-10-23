@@ -150,7 +150,7 @@ function channelsSection() {
     new ActionRowBuilder().addComponents(channelRow("d7_ch_orders", "orders", `🔔 Order log channel — current: ${chLabel("orders")}`)),
     new ActionRowBuilder().addComponents(channelRow("d7_ch_sales", "salesLogs", `🛒 Purchase request channel — current: ${chLabel("salesLogs")}`)),
     new ActionRowBuilder().addComponents(channelRow("d7_ch_showcase", "productShowcase", `🛍️ Showcase channel — current: ${chLabel("productShowcase")}`)),
-    new ActionRowBuilder().addComponents(channelRow("d7_welcome_ch", "welcome", `👋 Welcome channel (fallback) — current: ${chLabel("welcome")}`)),
+    new ActionRowBuilder().addComponents(channelRow("d7_welcome_ch", "welcome", `👋 Welcome channel — current: ${chLabel("welcome")}`)),
     // ⚠️ روم التقييمات ما عاد هنا — صار في قسم التقييمات فقط حتى ما يتكرر
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Back to menu").setStyle(ButtonStyle.Secondary)),
   ];
@@ -158,7 +158,10 @@ function channelsSection() {
 }
 
 // ─────────── قسم الترحيب ───────────
-// رسالة الترحيب تُرسل للعضو على **الخاص**، وإن فشل الخاص تُنشر في روم الترحيب المحدد.
+// رسالة الترحيب تُرسل للعضو على **الخاص** كنص عادي بلا إيمبد (طلب الصاحب).
+// ما يُنشر في روم الترحيب إلا في وضع "روم الترحيب" الصريح: وظيفة "الاحتياطي"
+// السابقة كانت تنشر إيمبد الروم عند كل انضمام لاعب خاصه مقفول — ضجيج طلبه
+// الصاحب أن يزول، فصار الخاص وحده في وضع الخاص.
 function ensureWelcome() {
   const w = (config.welcome ||= {});
   if (w.enabled === undefined) w.enabled = true;
@@ -202,6 +205,19 @@ function welcomePayload() {
     .setFooter({ text: w.footer || config.brand?.footer || "S2A DEV" });
   if (safeChannelId(w.imageUrl) || /^https?:\/\//.test(w.imageUrl || "")) e.setImage(w.imageUrl);
   return { embeds: [e] };
+}
+
+// رسالة الترحيب للخاص — نص عادي لا إيمbedo (طلب الصاحب الصريح: "خليها رسالة عادية").
+// عنوان بارز + النص + سطور الروابط + التذييل، بحدّ ديسكورد 2000 حرف للنص.
+function welcomeDMText() {
+  const w = ensureWelcome();
+  const title = String(w.title || "Welcome!").replace(/\*/g, "");
+  const body = [w.message || "", ...welcomeLines()].filter(x => x !== "" && x != null).join("\n");
+  const parts = [`**${title}**`];
+  if (body) parts.push(body);
+  if (/^https?:\/\//.test(w.imageUrl || "")) parts.push(w.imageUrl);
+  if (w.footer) parts.push(`*${w.footer}*`);
+  return parts.join("\n\n").slice(0, 2000);
 }
 
 // ─────────── رسالة الترحيب المثبّتة (D7 Dev) ───────────
@@ -272,8 +288,9 @@ function welcomeSection(statusText) {
   // المعاينة = ما ينشره زر الإرسال، ثم رسالة الترحيب التلقائية بالضبط
   const preview = welcomePayload();
   const meta = [
-    `**Welcome channel (fallback):** ${chLabel("welcome")} — used if the member keeps DMs closed.`,
-    "📨 **Send welcome message** posts the **first** embed below in that channel. The second embed is the automatic message a joining member receives.",
+    `**Welcome channel:** ${chLabel("welcome")} — used in room-send mode and by the 📨 Send button below.`,
+    "📨 **Send welcome message** posts the **first** embed below in that channel.",
+    "The second embed previews the joining message: in DM mode the member receives it as a **plain text DM** and nothing is posted in the room; in room mode it is posted there as this embed.",
   ];
   return { content: [statusText, ...meta].filter(Boolean).join("\n"), embeds: [...welcomeIntroPayload().embeds, ...preview.embeds], components: rows };
 }
@@ -980,18 +997,19 @@ client.on(Events.GuildMemberAdd, async member => {
     }
   }
   if (!config.welcome?.enabled) return;
-  const payload = welcomePayload();
 
-  // الوضع الافتراضي: رسالة خاصة للعضو. ما نذكره — يعرف نفسه.
+  // وضع الخاص (الافتراضي والمضبوط حالياً): نص عادي للعضو فقط.
+  // طلب الصاحب: لا إيمبد في الخاص، ولا شيء إطلاقاً في روم الترحيب —
+  // زار "الاحتياطي" السابق كان ينشر إيمبد الروم كلما انضم لاعب خاصه مقفول.
   if (config.welcome.sendDM !== false) {
-    const sent = await member.send(payload).then(() => true).catch(() => false);
-    if (sent) return;
-    // فشل الخاص (العضو قافله) → نجرب روم الترحيب المحدد كاحتياطي.
+    await member.send({ content: welcomeDMText() }).catch(() => {});
+    return;
   }
 
+  // وضع روم الترحيب: إيمبد في الروم مباشرة مع منشن المنضم.
   const channel = channelFromConfig(member.guild, "welcome");
   if (!channel?.isTextBased()) return;
-  await channel.send({ ...payload, content: `<@${member.id}>` }).catch(() => {});
+  await channel.send({ ...welcomePayload(), content: `<@${member.id}>` }).catch(() => {});
 });
 
 client.on(Events.InteractionCreate, async interaction => {
@@ -1330,7 +1348,7 @@ client.on(Events.InteractionCreate, async interaction => {
             config.welcome.sendDM = config.welcome.sendDM === false;
             saveConfig();
             return interaction.update(welcomeSection(config.welcome.sendDM
-              ? "📨 The welcome message is DM'd to the member — if their DMs are closed it is posted in the welcome channel."
+              ? "📨 The welcome message is sent to the member as a plain text DM — nothing is posted in the welcome channel."
               : "🗨️ The welcome message is posted directly in the **welcome channel** set from the Channels section."));
           }
           if (flag === "text") {

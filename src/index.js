@@ -5,7 +5,7 @@ const {
   Client, GatewayIntentBits, Partials, Events, REST, Routes,
   ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
   ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder, RoleSelectMenuBuilder,
-  ChannelSelectMenuBuilder, ChannelType, PermissionFlagsBits, EmbedBuilder
+  ChannelSelectMenuBuilder, ChannelType, PermissionFlagsBits, EmbedBuilder, UserSelectMenuBuilder
 } = require("discord.js");
 const db = require("./db");
 const { embed, hasStaff, formatPrice, safeChannelId, cleanFileName, EMBED_COLOR, EMBED_THUMB } = require("./utils");
@@ -269,20 +269,28 @@ function welcomeSection(statusText) {
 
   const rows = [
     new ActionRowBuilder().addComponents(roleSel),
-    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_store", w.storeChannelId, `🏪 Store channel — ${w.storeChannelId ? `<#${w.storeChannelId}>` : "Not set"}`)),
-    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_help", w.helpChannelId, `🆘 Help channel (Need Help) — ${w.helpChannelId ? `<#${w.helpChannelId}>` : "Not set"}`)),
-    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_releases", w.releasesChannelId, `🚀 Latest Releases channel — ${w.releasesChannelId ? `<#${w.releasesChannelId}>` : "Not set"}`)),
-    // ⬇️ خمسة صفوف فقط — هذا حد ديسكورد في الرسالة ولا يُتجاوز.
-    // القسم كان ستة صفوف (زر الإرسال في صف مفرد)، ورسالة بستة صفوف تُرفض
-    // بـ 400 قبل أن يصل ردّ البوت أصلاً، فتظهر للمستخدم:
-    // "S2A DEV didn't respond in time". زر الصورة اندمج في نافذة النص
-    // كحقل رابط اختياري حتى يتسع الصف لزر الإرسال.
+    // ⬇️ القنوات الثلاث في صف واحد (ديسكورد: حتى 5 مكوّنات للصف، والقوائم
+    // لا تخلط مع الأزرار). دمجها أفسح صفاً كاملاً لزر التجربة — وإلا تجاوز
+    // القسم حدّ الخمسة صفوف ورُفض بـ400 قبل أن يصل ردّ البوت، فظهرت للمستخدم
+    // "S2A DEV didn't respond in time". القيمة المحفوظة تظهر اسم الروم
+    // مكان التسمية فلا تُختصر التسمية إلا وهي فاضية أصلاً.
+    new ActionRowBuilder().addComponents(
+      welcomeChannelRow("d7_welcome_store", w.storeChannelId, `🏪 Store channel — ${w.storeChannelId ? `<#${w.storeChannelId}>` : "Not set"}`),
+      welcomeChannelRow("d7_welcome_help", w.helpChannelId, `🆘 Help channel (Need Help) — ${w.helpChannelId ? `<#${w.helpChannelId}>` : "Not set"}`),
+      welcomeChannelRow("d7_welcome_releases", w.releasesChannelId, `🚀 Latest Releases channel — ${w.releasesChannelId ? `<#${w.releasesChannelId}>` : "Not set"}`),
+    ),
+    // ⬇️ خمسة أزرار كحد أقصى في الصف — حدّ ديسكورد
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("panel:welcome:toggle").setLabel(w.enabled === false ? "❌ Welcome: off" : "✅ Welcome: on").setStyle(w.enabled === false ? ButtonStyle.Danger : ButtonStyle.Success),
       new ButtonBuilder().setCustomId("panel:welcome:mode").setLabel(w.sendDM === false ? "🗨️ Send: welcome channel" : "📨 Send: member DM").setStyle(w.sendDM === false ? ButtonStyle.Secondary : ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("panel:welcome:text").setLabel("✏️ Text & image").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("panel:welcome:send").setLabel("📨 Send welcome message").setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
+    ),
+    // ⬇️ زر التجربة في صفه الخاص: اضغط ثم اختر عضو فيصله ما يوصل للعضو
+    // الجديد بالضبط — بنفس الوضع الفعلي وبلا أثر على الإرسال التلقائي
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("panel:welcome:test").setLabel("🧪 Test welcome").setStyle(ButtonStyle.Success),
     ),
   ];
   // المعاينة = ما ينشره زر الإرسال، ثم رسالة الترحيب التلقائية بالضبط
@@ -293,6 +301,32 @@ function welcomeSection(statusText) {
     "The second embed previews the joining message: in DM mode the member receives it as a **plain text DM** and nothing is posted in the room; in room mode it is posted there as this embed.",
   ];
   return { content: [statusText, ...meta].filter(Boolean).join("\n"), embeds: [...welcomeIntroPayload().embeds, ...preview.embeds], components: rows };
+}
+
+// شاشة زر التجربة: اختيار عضو عبر قائمة المستخدمين (UserSelect) ثم رجوع
+// لقسم الترحيب بنتيجة الإرسال — رديت على زر واحد لا يبقى على الشاشة
+function welcomeTestView() {
+  const dmMode = config.welcome?.sendDM !== false;
+  return {
+    content: [
+      "🧪 **Send a test welcome message**",
+      "Pick a member below — they receive exactly what a joining member would get right now:",
+      `• **Current mode:** ${dmMode ? "member DM (plain text)" : "welcome channel (embed with a ping)"}`,
+      "• The on/off toggle does not affect this test.",
+      "",
+      "After sending you return here with the result.",
+    ].join("\n"),
+    components: [
+      new ActionRowBuilder().addComponents(new UserSelectMenuBuilder()
+        .setCustomId("d7_welcome_test_sel")
+        .setPlaceholder("Pick the member to send the test welcome to…")
+        .setMinValues(1)
+        .setMaxValues(1)),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("panel:welcome").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
 }
 
 // ─────────── قسم التذاكر (مطابق لصورة لوحة تحكم NSR) ───────────
@@ -1384,6 +1418,8 @@ client.on(Events.InteractionCreate, async interaction => {
               ? { content: `✅ The welcome message was posted in <#${channel.id}>.`, ephemeral: true }
               : { content: "⚠️ Could not post it there — check that I can send messages in that channel.", ephemeral: true });
           }
+          // زر التجربة → شاشة اختيار عضو، والنتيجة تظهر بعد الإرسال
+          if (flag === "test") return interaction.update(welcomeTestView());
           return interaction.update(welcomeSection());
         }
         if (section === "autoroles") return interaction.update(autorolesSection());
@@ -1633,6 +1669,31 @@ client.on(Events.InteractionCreate, async interaction => {
       config.welcome.storeRoleId = interaction.values[0] || "";
       saveConfig();
       return interaction.update(welcomeSection(interaction.values[0] ? "✅ Store role saved." : "🗑️ Role cleared — the store line no longer appears in the welcome message."));
+    }
+
+    // ─────────── زر التجربة: إرسال رسالة الترحيب لعضو مختار ───────────
+    // يرسل بالوضع الفعلي نفسه (خاص نصي أو روم بإيمبد ومنشن) وبلا أي أثر
+    // على الإرسال التلقائي — التجربة تجربة فقط، وزر التشغيل يبقى كلامه.
+    if (interaction.isUserSelectMenu() && interaction.customId === "d7_welcome_test_sel") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const targetId = interaction.values[0] || "";
+      if (!safeChannelId(targetId)) return interaction.update(welcomeTestView());
+      ensureWelcome();
+      if (config.welcome.sendDM !== false) {
+        const user = await interaction.client.users.fetch(targetId).catch(() => null);
+        const sent = user
+          ? await user.send({ content: welcomeDMText() }).then(() => true).catch(() => false)
+          : false;
+        return interaction.update(welcomeSection(sent
+          ? `🧪 Test welcome sent to <@${targetId}> — plain text DM, exactly like a new member's.`
+          : `❌ Could not DM <@${targetId}> — their DMs are closed. Switch the mode to the welcome channel to test there.`));
+      }
+      const channel = channelFromConfig(interaction.guild, "welcome");
+      if (!channel?.isTextBased()) return interaction.update(welcomeSection("⚠️ Set the welcome channel first — **Channels** section → 👋 Welcome channel."));
+      const posted = await channel.send({ ...welcomePayload(), content: `<@${targetId}>` }).catch(() => null);
+      return interaction.update(welcomeSection(posted
+        ? `🧪 Test welcome posted in <#${channel.id}> for <@${targetId}> — exactly like a new member's.`
+        : "❌ Could not post the test welcome — check that I can send messages in the welcome channel."));
     }
 
     // ─────────── نظام التقييمات (نسخة من NSR Hub) ───────────

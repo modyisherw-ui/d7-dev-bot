@@ -92,5 +92,9 @@
     "enabled": true,
     "memberRoleId": "1561454856764399626",
     "botRoleId": "1561454969201234032"
+  },
+  "ordersPanel": {
+    "channelId": "1563670313621786624",
+    "messageId": "1563692398687559761"
   }
 }

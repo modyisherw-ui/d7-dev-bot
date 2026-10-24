@@ -109,16 +109,22 @@ function productDeleteRows() {
       .setValue(String(p.id)))))];
 }
 
-// قائمة اختيار الطلب المراد حذفه (تظهر بعد ضغط زر الحذف)
-function orderDeleteRows() {
+// قائمة اختيار طلب — تعمل للحذف وللتعديل بنفس المظهر، ويفرّق بينهما
+// معرّف القائمة فقط (حالة واحدة لكل ضغطة، كما في رسالة الحالة).
+function orderPickRows(customId, placeholder) {
   const orders = db.prepare(`SELECT o.id,o.user_id,o.status,p.name product_name FROM orders o JOIN products p ON p.id=o.product_id ORDER BY o.id DESC LIMIT 25`).all();
   if (!orders.length) return null;
   return [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
-    .setCustomId("d7_order_del_sel").setPlaceholder("Select the order to delete permanently...").setMinValues(1).setMaxValues(1)
+    .setCustomId(customId).setPlaceholder(placeholder).setMinValues(1).setMaxValues(1)
     .addOptions(orders.map(o => new StringSelectMenuOptionBuilder()
       .setLabel(`#${o.id} — ${o.product_name}`.slice(0, 100))
       .setDescription(`${o.status} • buyer ${o.user_id}`.slice(0, 100))
       .setValue(String(o.id)))))];
+}
+
+// قائمة اختيار الطلب المراد حذفه (تظهر بعد ضغط زر الحذف)
+function orderDeleteRows() {
+  return orderPickRows("d7_order_del_sel", "Select the order to delete permanently...");
 }
 
 // ردّ على رسالة اللوحة نفسها متى أمكن (حتى لا تبقى الشاشة القديمة عالقة)
@@ -416,8 +422,12 @@ function ticketDeleteRows() {
   return rows;
 }
 
-// ─────────── قسم الطلبات: إحصاءات + حذف + اختيار الرومات ───────────
-function ordersSection(statusText) {
+// ─────────── قسم الطلبات: إحصاءات + حذف + تعديل + اختيار الرومات ───────────
+// opts.published = هذه الشاشة معروضة كرسالة ثابتة في روم لا كلوحة خاصة:
+// يسقط منها زر Home (لأنه سيحوّل رسالة الروم إلى اللوحة الرئيسية) ويُستبدل
+// بزر النشر/التحديث، وتُضاف علامة توضّح أنها تتحدث من نفسها.
+function ordersSection(statusText, opts = {}) {
+  const published = !!opts.published;
   // عدّاد لكل حالة — طلب الصاحب: كم طلب موجود، وكم مكتمل/ملغي/قيد التنفيذ/بانتظار التأكيد
   const counts = { pending: 0, confirmed: 0, delivered: 0, cancelled: 0 };
   for (const r of db.prepare("SELECT status, COUNT(*) n FROM orders GROUP BY status").all()) {
@@ -453,12 +463,18 @@ function ordersSection(statusText) {
   // ⬇️ روم حالة المنتجات: /product-edit ينزل فيه رسالة لكل تغيير حالة
   // (بلا روم محفوظ يظهر الـ placeholder، عشان يبان من أول مرة)
   rows.push(new ActionRowBuilder().addComponents(channelRow("d7_prod_status_ch", "productStatus", "🔄 Pick the product status channel")));
-  rows.push(new ActionRowBuilder().addComponents(
+  // ⬇️ صف الأزرار: الحذف والتعديل أولًا (أغراض اللوحة)، ثم النشر والتحديث،
+  // ثم Home في اللوحة الخاصة فقط. خمسة أزرار كحدّ أقصى (حدّ ديسكورد).
+  // زر ⚠️ Delete All انتقل إلى شاشة الحذف نفسها — الصف كان ستة أزرار
+  // ولا يُنشر في روم أصلاً زر Home (سيحوّل رسالة الروم للوحة الرئيسية).
+  const buttons = [
     new ButtonBuilder().setCustomId("panel:orders:del").setLabel("🗑️ Delete Order").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId("panel:orders:delall").setLabel("⚠️ Delete All").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId("panel:orders:edit").setLabel("✏️ Edit Order").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("panel:orders:publish").setLabel(published ? "📤 Move panel" : "📤 Publish panel").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("panel:orders").setLabel("🔄 Refresh").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary)
-  ));
+  ];
+  if (!published) buttons.push(new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary));
+  rows.push(new ActionRowBuilder().addComponents(buttons));
   // ديسكورد يخفي تسمية القائمة ما إن تحفظ قيمة داخلها ويعرض اسم الروم مكانها،
   // فتصير القائمتين متشابهتين تماماً ولا يعرف أحد أي واحدة لأي غرض.
   // عشان كذا نكتب الروم باسمه في نص الرسالة فوق القائمتين — هذا حصل فعلاً:
@@ -475,10 +491,88 @@ function ordersSection(statusText) {
       `**🛒 Purchase log: ${chLabel("orders")}** — set by the menu below. Every purchase posts a message with the role, buyer and price.`,
       `**🚚 Order status: ${chLabel("orderStatus")}** — set by the menu below. Every confirmation, delivery or cancellation updates one status message per order.`,
       `**🔄 Product status: ${chLabel("productStatus")}** — set by the menu below. Every product status change posts a message.`,
+      published
+        ? "\n📌 **Live panel** — this message refreshes itself every time an order is created, confirmed, changed or deleted."
+        : "\n📤 **Publish panel** puts this list in a channel as a permanent message everyone can see.",
     ].join("\n"))],
     // خمسة صفوف كحد أقصى (حد ديسكورد) — وزر الحذف جاء في صف الأزرار
     // الموجود لا في صف جديد، حتى لا يتعدى القسم الحد المسموح
     components: rows.slice(0, 5),
+  };
+}
+
+// ─────────── اللوحة المنشورة: رسالة ثابتة للطلبات في روم ───────────
+// config.ordersPanel = { channelId, messageId } تُحفظ في config.json وتتزامن
+// مع المستودع عبر سكربت المزامنة، فتعيش اللوحة بعد إعادة تشغيل البوت.
+function isPublishedPanel(interaction) {
+  return !!(config.ordersPanel?.messageId && interaction.message?.id === config.ordersPanel.messageId);
+}
+
+// ردّ شاشة الطلبات: نسخة منشورة إذا كانت هذه الرسالة هي اللوحة المنشورة،
+// وإلا النسخة العادية (لوحة `/panel` الخاصة أو أي ردّ آخر).
+function ordersPanelPayload(interaction, statusText) {
+  return ordersSection(statusText, { published: isPublishedPanel(interaction) });
+}
+
+// إعادة رسم اللوحة المنشورة بعد أي تغيير في الطلبات. تُستدعى قبل الردّ
+// على الضاغط حتى يكون ردّ الضاغط هو الكتابة الأخيرة (فلا تُمحى نصوص النجاح).
+// لو لم تُنشر اللوحة بعد فلا تفعل شيئاً.
+async function refreshOrdersPanel(guild) {
+  const op = config.ordersPanel;
+  if (!op?.messageId || !guild?.channels) return false;
+  // الكاش يمتلئ بعد الإقلاع، والجلب احتياطي لو غاب الروم من الكاش
+  const channel = guild.channels.cache?.get(op.channelId) || await guild.channels.fetch?.(op.channelId).catch(() => null);
+  if (!channel?.isTextBased() || !channel.messages?.fetch) return false;
+  const msg = await channel.messages.fetch(op.messageId).catch(() => null);
+  if (!msg?.edit) return false;
+  return !!(await msg.edit(ordersSection(undefined, { published: true })).catch(() => null));
+}
+
+// شاشة اختيار الروم لنشر اللوحة (تظهر بعد ضغط زر النشر)
+function ordersPublishView() {
+  return {
+    embeds: [embed("📤 Publish the Orders list", [
+      "Pick the channel where the orders list becomes a **permanent message** — stats, recent orders, confirm menu, room picks and all the buttons.",
+      "",
+      "It refreshes itself every time an order changes, and staff can delete or edit orders straight from it.",
+      "",
+      "Publishing again in another channel **moves** the panel (the old message is removed).",
+    ].join("\n"))],
+    components: [
+      new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder()
+        .setCustomId("d7_order_publish_ch")
+        .setPlaceholder("Pick the channel for the orders panel")
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        .setMinValues(1).setMaxValues(1)),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("panel:orders").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+// شاشة تعديل طلب واحد: أزرار الحالة الأربعة نفسها الموجودة في رسالة
+// الحالة، لكن بمعرّف خاص (d7_panel_status) لا يمسّ مؤشر رسالة الحالة.
+function orderEditStatusView(order) {
+  return {
+    embeds: [embed(`✏️ Edit order #${order.id}`, [
+      `**${order.product_name || order.name || "Product"}** · <@${order.user_id}> · **${order.status}**`,
+      order.price != null ? `Price: ${formatPrice(order.price, order.currency)}` : "",
+      "",
+      "Pick the new status — the order's status message and this list update together.",
+      order.status === "confirmed" ? "✅ *Confirming again here grants the product role, same as the status message.*" : "",
+    ].filter(Boolean).join("\n"))],
+    components: [
+      new ActionRowBuilder().addComponents(ORDER_STATUS_ACTIONS.map(a =>
+        new ButtonBuilder()
+          .setCustomId(`d7_panel_status:${order.id}:${a.key}`)
+          .setLabel(a.label)
+          .setStyle(a.style)
+          .setDisabled(order.status === a.key))),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("panel:orders").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+      ),
+    ],
   };
 }
 
@@ -849,7 +943,12 @@ async function confirmOrder(interaction, id) {
   // سجل الطلبات: رسالة جديدة للطلب تبيّن اسم المنتج ورتبته وسعره وحالته ومشتريه وتقييمه
   await postOrderFeed(guild, order);
   await refreshAdminDashboard(guild);
-  return interaction.reply({ content: `✅ Confirmed order #${id} and granted ${member} the **${order.name}** role.`, ephemeral: true });
+  // اللوحة المنشورة تتحرك معنا، والردّ بعدها هو الكتابة الأخيرة
+  // (لو كانت الشاشة الحالية هي اللوحة نفسها تُحدَّث بتأكيد النجاح).
+  await refreshOrdersPanel(guild).catch(() => {});
+  const okMsg = `✅ Confirmed order #${id} and granted ${member} the **${order.name}** role.`;
+  if (interaction.message?.components) return interaction.update(ordersPanelPayload(interaction, okMsg)).catch(() => {});
+  return interaction.reply({ content: okMsg, ephemeral: true });
 }
 
 // ─────────── إضافة منتج: الرتبة ← السعر ← الاسم ───────────
@@ -1122,6 +1221,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const product = db.prepare("SELECT * FROM products WHERE id=?").get(productId);
         if (!product) return interaction.reply({ content: "Product not found.", ephemeral: true });
         const result = db.prepare("INSERT INTO orders (guild_id,user_id,product_id) VALUES (?,?,?)").run(interaction.guildId, user.id, productId);
+        await refreshOrdersPanel(interaction.guild).catch(() => {});
         return interaction.reply({ embeds: [embed("Order created", `Order #${result.lastInsertRowid}\nCustomer: ${user}\nProduct: **${product.name}**\nUse /order-confirm to confirm payment and grant the product role.`)], ephemeral: true });
       }
       if (commandName === "order-confirm") {
@@ -1141,6 +1241,7 @@ client.on(Events.InteractionCreate, async interaction => {
         order.status = "delivered";
         // رسالة جديدة في سجل الطلبات تبيّن إن الحالة صارت "تم التنفيذ"
         await postOrderFeed(interaction.guild, order);
+        await refreshOrdersPanel(interaction.guild).catch(() => {});
         await refreshAdminDashboard(interaction.guild);
         return interaction.reply({ content: `Order #${id} marked as delivered.`, ephemeral: true });
       }
@@ -1155,6 +1256,7 @@ client.on(Events.InteractionCreate, async interaction => {
         order.status = "cancelled";
         // ما نسحب رول المنتج تلقائياً — الإلغاء يوثّق الحالة بس، والسحب قرار موظف
         await postOrderFeed(interaction.guild, order, { note: note || undefined });
+        await refreshOrdersPanel(interaction.guild).catch(() => {});
         await refreshAdminDashboard(interaction.guild);
         return interaction.reply({ content: `Order #${id} cancelled.${order.role_id ? ` Note: the product role <@&${order.role_id}> was not removed.` : ""}`, ephemeral: true });
       }
@@ -1285,9 +1387,23 @@ client.on(Events.InteractionCreate, async interaction => {
           if (flag === "del") {
             const delRows = orderDeleteRows();
             if (!delRows) return interaction.reply({ content: "There are no orders to delete.", ephemeral: true });
+            // ⚠️ Delete All انتقل إلى هنا من صف أزرار اللوحة (خُمسة صفوفه
+            // كانت ستة أزرار) — وهذا مكانه الطبيعي: شاشة الحذف.
             return interaction.update({
               embeds: [embed("🗑️ Delete Order", "**Pick an order from the menu below.**\n⚠️ Deletion is permanent — the order **and its status message** are removed.")],
               components: [...delRows, new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId("panel:orders:delall").setLabel("⚠️ Delete All").setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId("panel:orders").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+              )],
+            });
+          }
+          if (flag === "publish") return interaction.update(ordersPublishView());
+          if (flag === "edit") {
+            const editRows = orderPickRows("d7_order_edit_sel", "Select the order to edit its status...");
+            if (!editRows) return interaction.reply({ content: "There are no orders to edit.", ephemeral: true });
+            return interaction.update({
+              embeds: [embed("✏️ Edit Order", "**Pick an order from the menu below.**\nYou'll get its four status buttons — pick one and the order, its status message and this list all move together.")],
+              components: [...editRows, new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId("panel:orders").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
               )],
             });
@@ -1316,7 +1432,9 @@ client.on(Events.InteractionCreate, async interaction => {
             // لو عكسنا الترتيب لتجمّد الرد وراء ثلاثين جلب رسالة وانتهت المهلة
             db.prepare("DELETE FROM orders").run();
             db.prepare("DELETE FROM sqlite_sequence WHERE name='orders'").run();
-            await respondWith(interaction, ordersSection("✅ All orders deleted — numbering restarts at #1.")).catch(() => {});
+            // اللوحة المنشورة تُخفي كل الطلبات فوراً — والردّ بعدها يكون آخر كتابة
+            await refreshOrdersPanel(interaction.guild).catch(() => {});
+            await respondWith(interaction, ordersPanelPayload(interaction, "✅ All orders deleted — numbering restarts at #1.")).catch(() => {});
             const key = safeChannelId(config.channels?.orderStatus) ? "orderStatus" : "orders";
             const channel = channelFromConfig(interaction.guild, key);
             if (channel?.messages?.fetch) {
@@ -1327,7 +1445,7 @@ client.on(Events.InteractionCreate, async interaction => {
             }
             return;
           }
-          return interaction.update(ordersSection());
+          return interaction.update(ordersPanelPayload(interaction));
         }
         if (section === "tickets") return interaction.update(ticketsSection());
         if (section === "channels") return interaction.update(channelsSection());
@@ -1445,6 +1563,8 @@ client.on(Events.InteractionCreate, async interaction => {
         if (!p) return interaction.reply({ content: "Product not found.", ephemeral: true });
         if (p.status !== "working") return interaction.reply({ content: `This product is currently ${p.status}. Please contact support.`, ephemeral: true });
         const result = db.prepare("INSERT INTO orders (guild_id,user_id,product_id) VALUES (?,?,?)").run(interaction.guildId, interaction.user.id, p.id);
+        // اللوحة المنشورة تبيّن الطلب الجديد فوراً
+        await refreshOrdersPanel(interaction.guild).catch(() => {});
         await interaction.reply({ content: `Purchase request created: **Order #${result.lastInsertRowid}**. A staff member must confirm payment before the product role is granted.`, ephemeral: true });
         const notifyKey = safeChannelId(config.channels?.orders) ? "orders" : "salesLogs";
         await sendToConfiguredChannel(interaction.guild, notifyKey, { embeds: [purchaseFeedEmbed(p, interaction.user.id, { orderId: Number(result.lastInsertRowid), note: "Awaiting staff confirmation" })] });
@@ -1496,6 +1616,8 @@ client.on(Events.InteractionCreate, async interaction => {
           // رسالة حالة الطلب في رومها الخاص — نفس ما يفعله زر Buy بعد التأكيد
           const order = orderForFeed(orderId);
           if (order) await postOrderFeed(interaction.guild, order);
+          // ولوحة الطلبات المنشورة تُحدَّث مع أي شراء يُعتمد
+          await refreshOrdersPanel(interaction.guild).catch(() => {});
         }
       }
       // نحدّث الرسالة نفسها: نخفي الأزرار ونوضح النتيجة
@@ -1538,6 +1660,36 @@ client.on(Events.InteractionCreate, async interaction => {
       }
       // update() تعترف بالضغط وتعدّل الرسالة في مكانها — هذا هو المطلوب
       await interaction.update(statusPayload(fresh)).catch(() => {});
+      // ولو كانت لوحة الطلبات منشورة في روم فتحديثها هي نفسها
+      await refreshOrdersPanel(interaction.guild).catch(() => {});
+      await refreshAdminDashboard(interaction.guild);
+      return;
+    }
+
+    // ─────────── تغيير حالة الطلب من أزرار لوحة الطلبات (✏️ Edit Order) ───────────
+    // مسار مستقل تماماً عن d7_order_status: زر اللوحة لا يمسّ مؤشر رسالة
+    // الحالة إطلاقاً — لو مسّه لصارت رسالة اللوحة هي رسالة الحالة وضاعت
+    // رسالة الحالة القديمة في الروم. هنا نغيّر الحالة فقط، ثم نزامن رسالة
+    // الحالة عبر postOrderFeed (تحدّثها إن وُجدت أو تنشئها إن فقدت)، ثم
+    // نعيد شاشة اللوحة بتأكيد قصير.
+    if (interaction.isButton() && interaction.customId.startsWith("d7_panel_status:")) {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const [, rawOrder, next] = interaction.customId.split(":");
+      const order = orderForFeed(Number(rawOrder));
+      const act = ORDER_STATUS_ACTIONS.find(a => a.key === next);
+      if (!order || !act) return interaction.reply({ content: "Order not found.", ephemeral: true });
+      if (order.status === next) return interaction.reply({ content: `Order #${order.id} is already **${act.label}**.`, ephemeral: true });
+      // نفس منطق رسالة الحالة: تأكيد الدفع = تسليم الرتبة
+      if (next === "confirmed" && order.role_id) {
+        preApprove(order.user_id, order.product_id);
+        const member = await interaction.guild.members.fetch(order.user_id).catch(() => null);
+        if (member) await member.roles.add(order.role_id, `S2A DEV order #${order.id} confirmed`).catch(() => {});
+      }
+      setOrderStatus(order, next, interaction.user.id);
+      const fresh = orderForFeed(order.id) || order;
+      await postOrderFeed(interaction.guild, fresh);
+      await refreshOrdersPanel(interaction.guild).catch(() => {});
+      await respondWith(interaction, ordersPanelPayload(interaction, `✅ Order #${order.id} is now **${act.label}**.`)).catch(() => {});
       await refreshAdminDashboard(interaction.guild);
       return;
     }
@@ -1597,9 +1749,51 @@ client.on(Events.InteractionCreate, async interaction => {
       // الصف يُحذف أولاً (محلي، فوري) حتى تظهر الإحصاءات صحيحة في الرد،
       // ثم الردّ، ثم رسالة الحالة في الروم — الشبكة بعد لا قبل الرد
       db.prepare("DELETE FROM orders WHERE id=?").run(id);
-      await respondWith(interaction, ordersSection(`🗑️ Deleted order **#${id}** — its status message is being removed too.`)).catch(() => {});
+      // اللوحة المنشورة تُخفي الطلب فوراً — والردّ على الشاشة الحالية بعدها
+      await refreshOrdersPanel(interaction.guild).catch(() => {});
+      await respondWith(interaction, ordersPanelPayload(interaction, `🗑️ Deleted order **#${id}** — its status message is being removed too.`)).catch(() => {});
       await removeOrderStatusMessage(interaction.guild, order).catch(() => {});
       return;
+    }
+
+    // ─────────── اختيار طلب للتعديل: تعرض أزرار حالته الأربعة ───────────
+    if (interaction.isStringSelectMenu() && interaction.customId === "d7_order_edit_sel") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const order = orderForFeed(Number(interaction.values[0]));
+      if (!order) return interaction.reply({ content: "Order not found.", ephemeral: true });
+      return interaction.update(orderEditStatusView(order));
+    }
+
+    // ─────────── نشر/نقل لوحة الطلبات في روم ───────────
+    // الرسالة تبقى في الذاكرة عبر config.ordersPanel وتتزامن مع المستودع،
+    // فتبقى اللوحة حية بعد إعادة التشغيل وتتحدث مع كل تغيير في الطلبات.
+    if (interaction.isChannelSelectMenu() && interaction.customId === "d7_order_publish_ch") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const channelId = interaction.values[0];
+      const channel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch?.(channelId).catch(() => null);
+      if (!channel?.isTextBased()) return interaction.reply({ content: "That channel is not available to me.", ephemeral: true });
+      const payload = ordersSection(undefined, { published: true });
+      const prev = config.ordersPanel;
+      // نفس الروم الذي نُشرت فيه → نحدّث الرسالة القديمة بدل تكديس نسخ
+      if (prev?.messageId && prev.channelId === channelId) {
+        const old = await channel.messages?.fetch?.(prev.messageId).catch(() => null);
+        if (old?.edit) {
+          await old.edit(payload).catch(() => {});
+          return respondWith(interaction, ordersPanelPayload(interaction, `✅ Orders panel updated in <#${channelId}> — it stays there and refreshes itself.`)).catch(() => {});
+        }
+      }
+      const sent = await channel.send(payload).catch(() => null);
+      if (!sent) return interaction.reply({ content: `❌ Could not post there — check that I can send messages in <#${channelId}>.`, ephemeral: true });
+      // نقل إلى روم آخر → نحذف الرسالة القديمة حتى لا تبقى لوحة ميتة
+      if (prev?.messageId && prev.channelId !== channelId) {
+        const oldChannel = interaction.guild.channels.cache.get(prev.channelId);
+        const old = await oldChannel?.messages?.fetch?.(prev.messageId).catch(() => null);
+        if (old?.delete) await old.delete().catch(() => {});
+      }
+      config.ordersPanel = { channelId, messageId: sent.id };
+      saveConfig();
+      // نعود لشاشة اللوحة بسطر تأكيد — الردّ المؤقت يترك شاشة اختيار الروم عالقة
+      return respondWith(interaction, ordersPanelPayload(interaction, `✅ Orders panel published in <#${channelId}> — stats, list, confirm menu, room picks and buttons; it refreshes itself whenever an order changes.\nUse **📤 Move panel** again to move it elsewhere.`)).catch(() => {});
     }
 
     // ─────────── اختيار روم نشر المنتجات ───────────
@@ -1628,9 +1822,9 @@ client.on(Events.InteractionCreate, async interaction => {
       // القائمة نفسها شلناها من قسم الرومات (صارت في قسم التقييمات فقط).
       "d7_ch_reviews":    { key: "reviews",          section: channelsSection },
       "d7_welcome_ch":    { key: "welcome",          section: channelsSection },
-      "d7_order_ch":      { key: "orders",           section: ordersSection },
-      "d7_order_status_ch": { key: "orderStatus",    section: ordersSection },
-      "d7_prod_status_ch": { key: "productStatus",   section: ordersSection },
+      "d7_order_ch":      { key: "orders",           section: () => ordersPanelPayload(interaction) },
+      "d7_order_status_ch": { key: "orderStatus",    section: () => ordersPanelPayload(interaction) },
+      "d7_prod_status_ch": { key: "productStatus",   section: () => ordersPanelPayload(interaction) },
       "d7_ratings_ch":    { key: "reviews",          section: ratingsSection },
       "d7_pcheck_ch":     { key: "purchaseChecks",   section: ratingsSection },
     };
@@ -1641,6 +1835,8 @@ client.on(Events.InteractionCreate, async interaction => {
       config.channels[pick.key] = interaction.values[0];
       saveConfig();
       // نعيد رسم نفس القسم بدل رد مؤقت — عشان يظهر الاختيار محفوظ فوراً
+      // (ولو كانت لوحة الطلبات منشورة في روم فتحديثها هي نفسها، بكتابة أخيرة)
+      await refreshOrdersPanel(interaction.guild).catch(() => {});
       return interaction.update(pick.section());
     }
 
@@ -1933,6 +2129,7 @@ client.on(Events.InteractionCreate, async interaction => {
         db.prepare("UPDATE orders SET rating=?,review=? WHERE id=?").run(rating, review, id);
         db.prepare("INSERT OR REPLACE INTO product_reviews (order_id,user_id,product_id,rating,review) VALUES (?,?,?,?,?)").run(id, interaction.user.id, order.product_id, rating, review);
         await sendToConfiguredChannel(interaction.guild, "reviews", { embeds: [embed("Product review", `Product: **${order.product_name}**\nCustomer: <@${interaction.user.id}>\nRating: ${rating}/5\nReview: ${review || "No written comment."}`)] });
+        await refreshOrdersPanel(interaction.guild).catch(() => {});
         await refreshAdminDashboard(interaction.guild);
         return interaction.reply({ content: "Thank you! Your product review has been saved.", ephemeral: true });
       }

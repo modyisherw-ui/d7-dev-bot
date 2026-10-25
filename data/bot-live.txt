@@ -270,3 +270,54 @@ Node.js v22.23.3
 S2A DEV bot online as S2A DEV#8569
 S2A DEV bot online as S2A DEV#8569
 S2A DEV bot online as S2A DEV#8569
+(node:2232) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
+(Use `node --trace-warnings ...` to show where the warning was created)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+DiscordAPIError[10062]: Unknown interaction
+    at handleErrors (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/rest/dist/index.js:791:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async BurstHandler.runRequest (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/rest/dist/index.js:898:23)
+    at async _REST.request (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/rest/dist/index.js:1342:22)
+    at async ButtonInteraction.reply (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:193:22)
+Emitted 'error' event on Client instance at:
+    at emitUnhandledRejectionOrErr (node:events:402:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+  rawError: { message: 'Unknown interaction', code: 10062 },
+  code: 10062,
+  status: 404,
+  method: 'POST',
+  url: 'https://discord.com/api/v10/interactions/1563903193287626885/aW50ZXJhY3Rpb246MTU2MzkwMzE5MzI4NzYyNjg4NTpydXVyZXRDY2pJOHV4M1dNRDJDcHB4bVR3M0JhUHRKNUo0WGlWdmNibElKRlFrQ2hIaVNESHpqU2FYZ2dUYUR3MGZHMXFrWm5QdWVTWktJejZIMHoySzN6WEpnQ0Jwd2ZsVXpKUWJmRlJSTHpJclRiUjl4TWo3blVCYkZ4RzJIaw/callback?with_response=false',
+  requestBody: {
+    files: [],
+    json: {
+      type: 4,
+      data: {
+        content: "✅ Confirmed <@771031431714570331>'s purchase of **v2**.",
+        tts: false,
+        nonce: undefined,
+        enforce_nonce: false,
+        embeds: undefined,
+        components: undefined,
+        username: undefined,
+        avatar_url: undefined,
+        allowed_mentions: undefined,
+        flags: 64,
+        message_reference: undefined,
+        attachments: undefined,
+        sticker_ids: undefined,
+        thread_name: undefined,
+        applied_tags: undefined,
+        poll: undefined,
+        shared_client_theme: undefined
+      }
+    }
+  }
+}
+
+Node.js v22.23.3
+S2A DEV bot online as S2A DEV#8569
+(node:2424) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
+(Use `node --trace-warnings ...` to show where the warning was created)

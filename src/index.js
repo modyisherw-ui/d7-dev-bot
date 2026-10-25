@@ -275,35 +275,32 @@ function welcomeSection(statusText) {
 
   const rows = [
     new ActionRowBuilder().addComponents(roleSel),
-    // ⬇️ القنوات الثلاث في صف واحد (ديسكورد: حتى 5 مكوّنات للصف، والقوائم
-    // لا تخلط مع الأزرار). دمجها أفسح صفاً كاملاً لزر التجربة — وإلا تجاوز
-    // القسم حدّ الخمسة صفوف ورُفض بـ400 قبل أن يصل ردّ البوت، فظهرت للمستخدم
-    // "S2A DEV didn't respond in time". القيمة المحفوظة تظهر اسم الروم
-    // مكان التسمية فلا تُختصر التسمية إلا وهي فاضية أصلاً.
-    new ActionRowBuilder().addComponents(
-      welcomeChannelRow("d7_welcome_store", w.storeChannelId, `🏪 Store channel — ${w.storeChannelId ? `<#${w.storeChannelId}>` : "Not set"}`),
-      welcomeChannelRow("d7_welcome_help", w.helpChannelId, `🆘 Help channel (Need Help) — ${w.helpChannelId ? `<#${w.helpChannelId}>` : "Not set"}`),
-      welcomeChannelRow("d7_welcome_releases", w.releasesChannelId, `🚀 Latest Releases channel — ${w.releasesChannelId ? `<#${w.releasesChannelId}>` : "Not set"}`),
-    ),
-    // ⬇️ خمسة أزرار كحد أقصى في الصف — حدّ ديسكورد
+    // ⬇️ القنوات الثلاث — كل قائمة في صفها وحدها. هذا قانون ديسكورد
+    // الصريح: عرض القائمة = 5 من 5 وصفها لا يخلط معها شيئاً. دمجها في صف
+    // واحد رُفض بـ400 COMPONENT_LAYOUT_WIDTH_EXCEEDED وأسقط البوت كاملاً
+    // قبل أن يصل ردّه فظهرت للمستخدم "didn't respond in time". القيمة
+    // المحفوظة تظهر اسم الروم مكان التسمية فلا تُختصر التسمية أصلاً.
+    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_store", w.storeChannelId, `🏪 Store channel — ${w.storeChannelId ? `<#${w.storeChannelId}>` : "Not set"}`)),
+    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_help", w.helpChannelId, `🆘 Help channel (Need Help) — ${w.helpChannelId ? `<#${w.helpChannelId}>` : "Not set"}`)),
+    new ActionRowBuilder().addComponents(welcomeChannelRow("d7_welcome_releases", w.releasesChannelId, `🚀 Latest Releases channel — ${w.releasesChannelId ? `<#${w.releasesChannelId}>` : "Not set"}`)),
+    // ⬇️ صف الأزرار الوحيد الممكن: الرتبة + ثلاث قوائم + الأزرار = خمسة صفوف
+    // بالضبط (حدّ ديسكورد)، وخمسة أزرار كحدّ أقصى في الصف. لذلك اجتمع
+    // زرا الإرسال والتجربة خلف زر واحد «Send & Test»: تفتح شاشة فيها نشر
+    // الرسالة المثبّتة (D7 Dev) في الروم + اختيار عضو لتجربة ما يصله،
+    // ولا يُضحى بأيّ من الميزتين — زر الإرسال القديم صار داخل تلك الشاشة.
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("panel:welcome:toggle").setLabel(w.enabled === false ? "❌ Welcome: off" : "✅ Welcome: on").setStyle(w.enabled === false ? ButtonStyle.Danger : ButtonStyle.Success),
       new ButtonBuilder().setCustomId("panel:welcome:mode").setLabel(w.sendDM === false ? "🗨️ Send: welcome channel" : "📨 Send: member DM").setStyle(w.sendDM === false ? ButtonStyle.Secondary : ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("panel:welcome:text").setLabel("✏️ Text & image").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("panel:welcome:send").setLabel("📨 Send welcome message").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("panel:welcome:test").setLabel("📨 Send & Test").setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
-    ),
-    // ⬇️ زر التجربة في صفه الخاص: اضغط ثم اختر عضو فيصله ما يوصل للعضو
-    // الجديد بالضبط — بنفس الوضع الفعلي وبلا أثر على الإرسال التلقائي
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("panel:welcome:test").setLabel("🧪 Test welcome").setStyle(ButtonStyle.Success),
     ),
   ];
   // المعاينة = ما ينشره زر الإرسال، ثم رسالة الترحيب التلقائية بالضبط
   const preview = welcomePayload();
   const meta = [
-    `**Welcome channel:** ${chLabel("welcome")} — used in room-send mode and by the 📨 Send button below.`,
-    "📨 **Send welcome message** posts the **first** embed below in that channel.",
+    `**Welcome channel:** ${chLabel("welcome")} — used in room-send mode and by 📨 Post intro in the room (Send & Test screen).`,
+    "📨 **Post intro in the room** (inside **Send & Test**) posts the **first** embed below in that channel.",
     "The second embed previews the joining message: in DM mode the member receives it as a **plain text DM** and nothing is posted in the room; in room mode it is posted there as this embed.",
   ];
   return { content: [statusText, ...meta].filter(Boolean).join("\n"), embeds: [...welcomeIntroPayload().embeds, ...preview.embeds], components: rows };
@@ -315,11 +312,12 @@ function welcomeTestView() {
   const dmMode = config.welcome?.sendDM !== false;
   return {
     content: [
-      "🧪 **Send a test welcome message**",
+      "🧪 **Send & Test**",
       "Pick a member below — they receive exactly what a joining member would get right now:",
       `• **Current mode:** ${dmMode ? "member DM (plain text)" : "welcome channel (embed with a ping)"}`,
       "• The on/off toggle does not affect this test.",
       "",
+      "**📨 Post intro in the room** publishes the pinned welcome below (the D7 Dev copy) in the welcome channel — staff action, no member involved.",
       "After sending you return here with the result.",
     ].join("\n"),
     components: [
@@ -329,6 +327,10 @@ function welcomeTestView() {
         .setMinValues(1)
         .setMaxValues(1)),
       new ActionRowBuilder().addComponents(
+        // زر النشر اليدوي نزل إلى هنا من اللوحة الرئيسية: صفوف القسم بلغت
+        // خمسة (حدّ ديسكورد) فلا يتّسع لزر سادس هناك، وهذه الشاشة ضِيق
+        // فتسع.
+        new ButtonBuilder().setCustomId("panel:welcome:send").setLabel("📨 Post intro in the room").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId("panel:welcome").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
       ),
     ],
@@ -455,36 +457,32 @@ function ordersSection(statusText, opts = {}) {
         .setDescription(`${o.user_id} • ${formatPrice(o.price,o.currency)}`.slice(0, 100))
         .setValue(String(o.id))))));
   }
-  // ⬇️ قوائم الرومات الثلاث — في لوحة /panel فقط. صاحب اللوحة طلب لوحته
-  // نظيفة: طلبات وتفاصيل لا إعدادات. ودمجها في صف واحد يوفّر صفوفاً
-  // (ديسكورد: حتى 5 مكوّنات للصف، والقوائم لا تخلط مع الأزرار).
+  // ⬇️ قوائم الرومات الثلاث — كل قائمة في صفها وحدها: هذا قانون ديسكورد
+  // الصريح (عرض القائمة = 5 من 5، وصف القائمة لا يخلط شيئاً معها)، ودمجها
+  // في صف واحد رُفض بـ400 COMPONENT_LAYOUT_WIDTH_EXCEEDED وأسقط البوت كاملاً
+  // فظهر لصاحب اللوحة "didn't respond in time". وفي اللوحة المنشورة لا
+  // تُعرض إطلاقاً — طلبها صاحب اللوحة: لوحة طلبات لا إعدادات.
   if (!published) {
     // الـ placeholder يظهر فقط لما ما يكون فيه روم محفوظ — ولو كان محفوظاً
     // يظهر اسمه داخل القائمة مكانها، عشان كذا نذكر كل روم في نص الرسالة.
-    rows.push(new ActionRowBuilder().addComponents(
-      channelRow("d7_order_ch", "orders", "🛒 Pick the purchase log channel"),
-      channelRow("d7_order_status_ch", "orderStatus", "🚚 Pick the order status channel"),
-      channelRow("d7_prod_status_ch", "productStatus", "🔄 Pick the product status channel"),
-    ));
+    rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_ch", "orders", "🛒 Pick the purchase log channel")));
+    rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_status_ch", "orderStatus", "🚚 Pick the order status channel")));
+    rows.push(new ActionRowBuilder().addComponents(channelRow("d7_prod_status_ch", "productStatus", "🔄 Pick the product status channel")));
   }
-  // ⬇️ صف الأزرار: عرض التفاصيل أولاً (طلب الصاحب: زر يفتح بطاقة الطلب)،
-  // ثم الحذف والتعديل ثم النشر والتحديث — خمسة أزرار كحدّ أقصى (حدّ ديسكورد).
-  // زر Home ينزل لصفه الثاني في اللوحة الخاصة، ولا يُنشر في روم أصلاً
-  // لأنه سيحوّل رسالة الروم إلى اللوحة الرئيسية. زر ⚠️ Delete All صار في
-  // شاشة الحذف لأن صف الأزرار كان ستة أزرار.
+  // ⬇️ صف الأزرار: خمسة أزرار كحدّ أقصى (حدّ ديسكورد). في اللوحة الخاصة
+  // يدخل Home هنا ويُستبعد Refresh (أي ضغطة تعيد الرسم أصلاً) لأن الصفوف
+  // بلغت خمسة: معلّق + ثلاث قوائم + الأزرار. وفي اللوحة المنشورة لا Home
+  // فيبقى Refresh — زر ⚠️ Delete All صار في شاشة الحذف منذ الجولة الماضية.
   const buttons = [
     new ButtonBuilder().setCustomId("panel:orders:view").setLabel("👁️ View Details").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("panel:orders:del").setLabel("🗑️ Delete Order").setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId("panel:orders:edit").setLabel("✏️ Edit Order").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId("panel:orders:publish").setLabel(published ? "📤 Move panel" : "📤 Publish panel").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("panel:orders").setLabel("🔄 Refresh").setStyle(ButtonStyle.Primary),
+    published
+      ? new ButtonBuilder().setCustomId("panel:orders").setLabel("🔄 Refresh").setStyle(ButtonStyle.Primary)
+      : new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
   ];
   rows.push(new ActionRowBuilder().addComponents(buttons));
-  if (!published) {
-    rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
-    ));
-  }
   return {
     content: statusText || undefined,
     embeds: [embed("🧾 Orders", [

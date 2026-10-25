@@ -23,6 +23,15 @@ const client = new Client({
   partials: [Partials.Channel, Partials.User]
 });
 
+// ─────────── شبكة أمان: خطأ واحد لا يُسقط البوت ───────────
+// الانهيارات السابقة كلها من هذا الباب: ردٌّ متأخر على تفاعل انتهت
+// صلاحيته (10062 Unknown interaction) كان يرفض ب-promis غير معالَج، فيخرج
+// البوت من الحياة ويصبح كل زر بعده ينتهي بـ "didn't respond in time"
+// حتى يُعاد تشغيله. ماسح الضغط نفسه هو ما يصلح السبب (يعترف أولاً ثم
+// يكمل وراء الاعتراف)، وهذي تضمن إن أي استثناء فاتنا يُسجَّل لا يُقتله.
+process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", err));
+client.on("error", (err) => console.error("Client error:", err));
+
 const pendingReviews = new Map();
 // اسم وسعر المنتج بانتظار باقي خطوات الإضافة (الرتبة ← السعر ← الاسم)
 const pendingProduct = new Map();
@@ -995,9 +1004,15 @@ async function confirmOrder(interaction, id) {
   const order = db.prepare("SELECT o.*, p.name, p.role_id, p.price, p.currency FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=?").get(id);
   if (!order) return interaction.reply({ content: "Order not found.", ephemeral: true });
   if (order.status !== "pending") return interaction.reply({ content: `This order is already **${order.status}**.`, ephemeral: true });
+  // ── اعتراف فوري قبل أي خطوة شبكة (جلب العضو، منح الرتبة، DM، سجل
+  // الطلبات، اللوحة المنشورة، لوحة الإدارة): ديسكورد يمنح 3 ثوانٍ فقط،
+  // والردّ المتأخر كان ينتهي بـ10062 Unknown interaction ويُسقِط البوت.
+  const fromMessage = !!interaction.message?.components;
+  if (fromMessage) await interaction.deferUpdate().catch(() => {});
+  else await interaction.deferReply({ flags: 64 }).catch(() => {});
   const guild = interaction.guild;
   const member = await guild.members.fetch(order.user_id).catch(() => null);
-  if (!member) return interaction.reply({ content: "The buyer is not a member of this server.", ephemeral: true });
+  if (!member) return interaction.editReply({ content: "The buyer is not a member of this server." }).catch(() => {});
   if (order.role_id) {
     // تأكيد الدفع من الموظف نفسه → ما نطلب تأكيداً ثانياً قبل رسالة التقييم
     preApprove(order.user_id, order.product_id);
@@ -1017,8 +1032,8 @@ async function confirmOrder(interaction, id) {
   // (لو كانت الشاشة الحالية هي اللوحة نفسها تُحدَّث بتأكيد النجاح).
   await refreshOrdersPanel(guild).catch(() => {});
   const okMsg = `✅ Confirmed order #${id} and granted ${member} the **${order.name}** role.`;
-  if (interaction.message?.components) return interaction.update(ordersPanelPayload(interaction, okMsg)).catch(() => {});
-  return interaction.reply({ content: okMsg, ephemeral: true });
+  if (fromMessage) return interaction.editReply(ordersPanelPayload(interaction, okMsg)).catch(() => {});
+  return interaction.editReply({ content: okMsg }).catch(() => {});
 }
 
 // ─────────── إضافة منتج: الرتبة ← السعر ← الاسم ───────────
@@ -1215,7 +1230,7 @@ client.on(Events.GuildMemberAdd, async member => {
   await channel.send({ ...welcomePayload(), content: `<@${member.id}>` }).catch(() => {});
 });
 
-client.on(Events.InteractionCreate, async interaction => {
+async function handleInteraction(interaction) {
   try {
     // ─────────── إكمال أمر /rate (اسم المنتج مع قائمة مقترحة) ───────────
     if (interaction.isAutocomplete()) {
@@ -1291,8 +1306,10 @@ client.on(Events.InteractionCreate, async interaction => {
         const product = db.prepare("SELECT * FROM products WHERE id=?").get(productId);
         if (!product) return interaction.reply({ content: "Product not found.", ephemeral: true });
         const result = db.prepare("INSERT INTO orders (guild_id,user_id,product_id) VALUES (?,?,?)").run(interaction.guildId, user.id, productId);
+        // اعتراف قبل تحديث اللوحة (شبكة) — ديسكورد يمنح 3 ثوانٍ فقط
+        await interaction.deferReply({ flags: 64 }).catch(() => {});
         await refreshOrdersPanel(interaction.guild).catch(() => {});
-        return interaction.reply({ embeds: [embed("Order created", `Order #${result.lastInsertRowid}\nCustomer: ${user}\nProduct: **${product.name}**\nUse /order-confirm to confirm payment and grant the product role.`)], ephemeral: true });
+        return interaction.editReply({ content: `Order #${result.lastInsertRowid}\nCustomer: ${user}\nProduct: **${product.name}**\nUse /order-confirm to confirm payment and grant the product role.` }).catch(() => {});
       }
       if (commandName === "order-confirm") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -1309,11 +1326,13 @@ client.on(Events.InteractionCreate, async interaction => {
         const start = order.confirmed_at ? new Date(order.confirmed_at.replace(" ", "T") + "Z").getTime() : now;
         db.prepare("UPDATE orders SET status='delivered',delivered_at=CURRENT_TIMESTAMP,delivery_seconds=? WHERE id=?").run(Math.max(0, Math.floor((now-start)/1000)), id);
         order.status = "delivered";
+        // اعتراف قبل رسائل السجل واللوحات (شبكة كلها)
+        await interaction.deferReply({ flags: 64 }).catch(() => {});
         // رسالة جديدة في سجل الطلبات تبيّن إن الحالة صارت "تم التنفيذ"
         await postOrderFeed(interaction.guild, order);
         await refreshOrdersPanel(interaction.guild).catch(() => {});
         await refreshAdminDashboard(interaction.guild);
-        return interaction.reply({ content: `Order #${id} marked as delivered.`, ephemeral: true });
+        return interaction.editReply({ content: `Order #${id} marked as delivered.` }).catch(() => {});
       }
       if (commandName === "order-cancel") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -1325,10 +1344,11 @@ client.on(Events.InteractionCreate, async interaction => {
         db.prepare("UPDATE orders SET status='cancelled' WHERE id=?").run(id);
         order.status = "cancelled";
         // ما نسحب رول المنتج تلقائياً — الإلغاء يوثّق الحالة بس، والسحب قرار موظف
+        await interaction.deferReply({ flags: 64 }).catch(() => {});
         await postOrderFeed(interaction.guild, order, { note: note || undefined });
         await refreshOrdersPanel(interaction.guild).catch(() => {});
         await refreshAdminDashboard(interaction.guild);
-        return interaction.reply({ content: `Order #${id} cancelled.${order.role_id ? ` Note: the product role <@&${order.role_id}> was not removed.` : ""}`, ephemeral: true });
+        return interaction.editReply({ content: `Order #${id} cancelled.${order.role_id ? ` Note: the product role <@&${order.role_id}> was not removed.` : ""}` }).catch(() => {});
       }
       if (commandName === "orders") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -1338,8 +1358,9 @@ client.on(Events.InteractionCreate, async interaction => {
       }
       if (commandName === "dashboard-refresh") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+        await interaction.deferReply({ flags: 64 }).catch(() => {});
         await refreshAdminDashboard(interaction.guild);
-        return interaction.reply({ content: "Dashboard refreshed where configured.", ephemeral: true });
+        return interaction.editReply({ content: "Dashboard refreshed where configured." }).catch(() => {});
       }
       if (commandName === "embed-send") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -1512,9 +1533,9 @@ client.on(Events.InteractionCreate, async interaction => {
             // لو عكسنا الترتيب لتجمّد الرد وراء ثلاثين جلب رسالة وانتهت المهلة
             db.prepare("DELETE FROM orders").run();
             db.prepare("DELETE FROM sqlite_sequence WHERE name='orders'").run();
-            // اللوحة المنشورة تُخفي كل الطلبات فوراً — والردّ بعدها يكون آخر كتابة
-            await refreshOrdersPanel(interaction.guild).catch(() => {});
+            // الردّ أولًا (شبكة بعده لا قبله)، ثم اللوحة المنشورة ثم الحذف
             await respondWith(interaction, ordersPanelPayload(interaction, "✅ All orders deleted — numbering restarts at #1.")).catch(() => {});
+            await refreshOrdersPanel(interaction.guild).catch(() => {});
             const key = safeChannelId(config.channels?.orderStatus) ? "orderStatus" : "orders";
             const channel = channelFromConfig(interaction.guild, key);
             if (channel?.messages?.fetch) {
@@ -1643,9 +1664,10 @@ client.on(Events.InteractionCreate, async interaction => {
         if (!p) return interaction.reply({ content: "Product not found.", ephemeral: true });
         if (p.status !== "working") return interaction.reply({ content: `This product is currently ${p.status}. Please contact support.`, ephemeral: true });
         const result = db.prepare("INSERT INTO orders (guild_id,user_id,product_id) VALUES (?,?,?)").run(interaction.guildId, interaction.user.id, p.id);
-        // اللوحة المنشورة تبيّن الطلب الجديد فوراً
-        await refreshOrdersPanel(interaction.guild).catch(() => {});
+        // الاعتراف أولاً (كل ما بعده شبكة، وديسكورد يمنح 3 ثوانٍ فقط)،
+        // ثم اللوحة المنشورة، ثم سجل الشراء، ثم لوحة الإدارة
         await interaction.reply({ content: `Purchase request created: **Order #${result.lastInsertRowid}**. A staff member must confirm payment before the product role is granted.`, ephemeral: true });
+        await refreshOrdersPanel(interaction.guild).catch(() => {});
         const notifyKey = safeChannelId(config.channels?.orders) ? "orders" : "salesLogs";
         await sendToConfiguredChannel(interaction.guild, notifyKey, { embeds: [purchaseFeedEmbed(p, interaction.user.id, { orderId: Number(result.lastInsertRowid), note: "Awaiting staff confirmation" })] });
         await refreshAdminDashboard(interaction.guild);
@@ -1680,6 +1702,11 @@ client.on(Events.InteractionCreate, async interaction => {
       // نحدّد الحالة أولاً حتى لا يمراره اثنان في نفس اللحظة
       const changed = db.purchaseChecks.decide(check.id, approved ? "approved" : "rejected", interaction.user.id);
       if (!changed.changes) return interaction.reply({ content: "Someone already decided this check.", ephemeral: true });
+      // ── من هنا كل خطوة شبكة: جلب العضو، رسالة التقييم، إنشاء الطلب،
+      // رسائل السجل، تحديث اللوحة، وتعديل رسالة الفحص — ديسكورد لا يمنح
+      // أكثر من 3 ثوانٍ قبل ردّ. الردّ المتأخر كان ينتهي بـ10062Unknown
+      // interaction ويُسقِط البوت، فنعترف أولاً ثم نكمل خلف الاعتراف.
+      await interaction.deferReply({ flags: 64 }).catch(() => {});
       const product = ratings.getProducts().find(p => p.id === String(check.product_id)) || null;
       let dmSent = false;
       if (approved) {
@@ -1711,7 +1738,7 @@ client.on(Events.InteractionCreate, async interaction => {
           : `❌ Rejected <@${check.user_id}>'s purchase — nothing was sent.`,
       ];
       if (approved && !dmSent) lines.push("⚠️ Could not DM the rating message — the member may have DMs closed.");
-      return interaction.reply({ content: lines.join("\n"), ephemeral: true });
+      return interaction.editReply({ content: lines.join("\n") }).catch(() => {});
     }
 
     // ─────────── تغيير حالة الطلب من الأزرار داخل رسالة الحالة ───────────
@@ -1723,12 +1750,11 @@ client.on(Events.InteractionCreate, async interaction => {
       if (!order || !act) return interaction.reply({ content: "Order not found.", ephemeral: true });
       if (order.status === next) return interaction.reply({ content: `Order #${order.id} is already **${act.label}**.`, ephemeral: true });
 
-      // قيد التنفيذ = تأكيد الدفع = تسليم الرتبة، زي ما يفعل /order-confirm
-      if (next === "confirmed" && order.role_id) {
-        preApprove(order.user_id, order.product_id);
-        const member = await interaction.guild.members.fetch(order.user_id).catch(() => null);
-        if (member) await member.roles.add(order.role_id, `S2A DEV order #${order.id} confirmed`).catch(() => {});
-      }
+      // التأكيد = تسليم الرتبة، زي ما يفعل /order-confirm — لكن المنح شبكة
+      // (جلب العضو ثم إضافة الرتبة) والاعتراف بالضغط أول بأول:
+      // كل ما هو محلي (preApprove + كتابة الحالة + مؤشر رسالة الحالة)
+      // يجري أولاً، ثم update()، ثم الشبكة خلفه.
+      if (next === "confirmed" && order.role_id) preApprove(order.user_id, order.product_id);
       setOrderStatus(order, next, interaction.user.id);
 
       const fresh = orderForFeed(order.id) || order;
@@ -1740,6 +1766,11 @@ client.on(Events.InteractionCreate, async interaction => {
       }
       // update() تعترف بالضغط وتعدّل الرسالة في مكانها — هذا هو المطلوب
       await interaction.update(statusPayload(fresh)).catch(() => {});
+      // خلف الاعتراف: منح الرتبة ثم تحديث اللوحات
+      if (next === "confirmed" && order.role_id) {
+        const member = await interaction.guild.members.fetch(order.user_id).catch(() => null);
+        if (member) await member.roles.add(order.role_id, `S2A DEV order #${order.id} confirmed`).catch(() => {});
+      }
       // ولو كانت لوحة الطلبات منشورة في روم فتحديثها هي نفسها
       await refreshOrdersPanel(interaction.guild).catch(() => {});
       await refreshAdminDashboard(interaction.guild);
@@ -1759,17 +1790,18 @@ client.on(Events.InteractionCreate, async interaction => {
       const act = ORDER_STATUS_ACTIONS.find(a => a.key === next);
       if (!order || !act) return interaction.reply({ content: "Order not found.", ephemeral: true });
       if (order.status === next) return interaction.reply({ content: `Order #${order.id} is already **${act.label}**.`, ephemeral: true });
-      // نفس منطق رسالة الحالة: تأكيد الدفع = تسليم الرتبة
+      // نفس منطق رسالة الحالة: تأكيد الدفع = تسليم الرتبة، والاعتراف
+      // بالضغط أولًا (شبكة بعد الاعتراف لا قبله — 3 ثوانٍ فقط عند ديسكورد)
+      if (next === "confirmed" && order.role_id) preApprove(order.user_id, order.product_id);
+      setOrderStatus(order, next, interaction.user.id);
+      const fresh = orderForFeed(order.id) || order;
+      await respondWith(interaction, ordersPanelPayload(interaction, `✅ Order #${order.id} is now **${act.label}**.`)).catch(() => {});
       if (next === "confirmed" && order.role_id) {
-        preApprove(order.user_id, order.product_id);
         const member = await interaction.guild.members.fetch(order.user_id).catch(() => null);
         if (member) await member.roles.add(order.role_id, `S2A DEV order #${order.id} confirmed`).catch(() => {});
       }
-      setOrderStatus(order, next, interaction.user.id);
-      const fresh = orderForFeed(order.id) || order;
       await postOrderFeed(interaction.guild, fresh);
       await refreshOrdersPanel(interaction.guild).catch(() => {});
-      await respondWith(interaction, ordersPanelPayload(interaction, `✅ Order #${order.id} is now **${act.label}**.`)).catch(() => {});
       await refreshAdminDashboard(interaction.guild);
       return;
     }
@@ -1829,9 +1861,9 @@ client.on(Events.InteractionCreate, async interaction => {
       // الصف يُحذف أولاً (محلي، فوري) حتى تظهر الإحصاءات صحيحة في الرد،
       // ثم الردّ، ثم رسالة الحالة في الروم — الشبكة بعد لا قبل الرد
       db.prepare("DELETE FROM orders WHERE id=?").run(id);
-      // اللوحة المنشورة تُخفي الطلب فوراً — والردّ على الشاشة الحالية بعدها
-      await refreshOrdersPanel(interaction.guild).catch(() => {});
+      // الردّ قبل أي شبكة: تعديل اللوحة المنشورة ينتظر وراء الاعتراف
       await respondWith(interaction, ordersPanelPayload(interaction, `🗑️ Deleted order **#${id}** — its status message is being removed too.`)).catch(() => {});
+      await refreshOrdersPanel(interaction.guild).catch(() => {});
       await removeOrderStatusMessage(interaction.guild, order).catch(() => {});
       return;
     }
@@ -1857,9 +1889,12 @@ client.on(Events.InteractionCreate, async interaction => {
     // فتبقى اللوحة حية بعد إعادة التشغيل وتتحدث مع كل تغيير في الطلبات.
     if (interaction.isChannelSelectMenu() && interaction.customId === "d7_order_publish_ch") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      // اعتراف فوري: ما بعده جلب روم ورسائل وتعديل/نشر — شبكة كلها،
+      // و3 ثوانٍ فقط قبل أن يقول ديسكورد "Unknown interaction"
+      await interaction.deferReply({ flags: 64 }).catch(() => {});
       const channelId = interaction.values[0];
       const channel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch?.(channelId).catch(() => null);
-      if (!channel?.isTextBased()) return interaction.reply({ content: "That channel is not available to me.", ephemeral: true });
+      if (!channel?.isTextBased()) return interaction.editReply({ content: "That channel is not available to me." }).catch(() => {});
       const payload = ordersSection(undefined, { published: true });
       const prev = config.ordersPanel;
       // نفس الروم الذي نُشرت فيه → نحدّث الرسالة القديمة بدل تكديس نسخ
@@ -1867,11 +1902,11 @@ client.on(Events.InteractionCreate, async interaction => {
         const old = await channel.messages?.fetch?.(prev.messageId).catch(() => null);
         if (old?.edit) {
           await old.edit(payload).catch(() => {});
-          return respondWith(interaction, ordersPanelPayload(interaction, `✅ Orders panel updated in <#${channelId}> — it stays there and refreshes itself.`)).catch(() => {});
+          return interaction.editReply(ordersPanelPayload(interaction, `✅ Orders panel updated in <#${channelId}> — it stays there and refreshes itself.`)).catch(() => {});
         }
       }
       const sent = await channel.send(payload).catch(() => null);
-      if (!sent) return interaction.reply({ content: `❌ Could not post there — check that I can send messages in <#${channelId}>.`, ephemeral: true });
+      if (!sent) return interaction.editReply({ content: `❌ Could not post there — check that I can send messages in <#${channelId}>.` }).catch(() => {});
       // نقل إلى روم آخر → نحذف الرسالة القديمة حتى لا تبقى لوحة ميتة
       if (prev?.messageId && prev.channelId !== channelId) {
         const oldChannel = interaction.guild.channels.cache.get(prev.channelId);
@@ -1881,12 +1916,14 @@ client.on(Events.InteractionCreate, async interaction => {
       config.ordersPanel = { channelId, messageId: sent.id };
       saveConfig();
       // نعود لشاشة اللوحة بسطر تأكيد — الردّ المؤقت يترك شاشة اختيار الروم عالقة
-      return respondWith(interaction, ordersPanelPayload(interaction, `✅ Orders panel published in <#${channelId}> — stats, list, confirm menu, room picks and buttons; it refreshes itself whenever an order changes.\nUse **📤 Move panel** again to move it elsewhere.`)).catch(() => {});
+      return interaction.editReply(ordersPanelPayload(interaction, `✅ Orders panel published in <#${channelId}> — purchase statistics, the order list and its three buttons (👁️ View Details · 🗑️ Delete · ✏️ Edit); it refreshes itself whenever an order changes.\nUse **📤 Publish panel** from /panel again to move it elsewhere.`)).catch(() => {});
     }
 
     // ─────────── اختيار روم نشر المنتجات ───────────
     if (interaction.isChannelSelectMenu() && interaction.customId === "d7_showcase_channel") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      // اعتراف فوري قبل نشر حتى عشر رسائل — الشبكة بطيئة ولا نتجاوز 3 ثوانٍ
+      await interaction.deferReply({ flags: 64 }).catch(() => {});
       const channelId = interaction.values[0];
       config.channels ||= {};
       config.channels.productShowcase = channelId;
@@ -1896,7 +1933,7 @@ client.on(Events.InteractionCreate, async interaction => {
       for (const product of products.slice(0, 10)) {
         await interaction.guild.channels.cache.get(channelId)?.send({ embeds: [productEmbed(product)], components: productPanelRows(product.id) }).then(() => sent++).catch(() => {});
       }
-      return interaction.reply({ content: `✅ Published ${sent} product(s) in <#${channelId}>.`, ephemeral: true });
+      return interaction.editReply({ content: `✅ Published ${sent} product(s) in <#${channelId}>.` }).catch(() => {});
     }
 
     // ─────────── اختيار رومات التنبيهات والنشر ───────────
@@ -1922,10 +1959,11 @@ client.on(Events.InteractionCreate, async interaction => {
       config.channels ||= {};
       config.channels[pick.key] = interaction.values[0];
       saveConfig();
-      // نعيد رسم نفس القسم بدل رد مؤقت — عشان يظهر الاختيار محفوظ فوراً
-      // (ولو كانت لوحة الطلبات منشورة في روم فتحديثها هي نفسها، بكتابة أخيرة)
+      // نعيد رسم نفس القسم أولًا (اعتراف بالضغط قبل أي شبكة)، ثم
+      // تحديث اللوحة المنشورة إن كانت هذه القسمة مخصّصة لها
+      await interaction.update(pick.section()).catch(() => {});
       await refreshOrdersPanel(interaction.guild).catch(() => {});
-      return interaction.update(pick.section());
+      return;
     }
 
     // ─────────── لوحة التذاكر: فتح تذكرة ───────────
@@ -1963,19 +2001,22 @@ client.on(Events.InteractionCreate, async interaction => {
       const targetId = interaction.values[0] || "";
       if (!safeChannelId(targetId)) return interaction.update(welcomeTestView());
       ensureWelcome();
+      // اعتراف فوري: ما بعده جلب العضو وإرسال خاص أو نشر في الروم — شبكة،
+      // و3 ثوانٍ فقط قبل أن يقول ديسكورد "didn't respond in time"
+      await interaction.deferUpdate().catch(() => {});
       if (config.welcome.sendDM !== false) {
         const user = await interaction.client.users.fetch(targetId).catch(() => null);
         const sent = user
           ? await user.send({ content: welcomeDMText() }).then(() => true).catch(() => false)
           : false;
-        return interaction.update(welcomeSection(sent
+        return interaction.editReply(welcomeSection(sent
           ? `🧪 Test welcome sent to <@${targetId}> — plain text DM, exactly like a new member's.`
           : `❌ Could not DM <@${targetId}> — their DMs are closed. Switch the mode to the welcome channel to test there.`));
       }
       const channel = channelFromConfig(interaction.guild, "welcome");
-      if (!channel?.isTextBased()) return interaction.update(welcomeSection("⚠️ Set the welcome channel first — **Channels** section → 👋 Welcome channel."));
+      if (!channel?.isTextBased()) return interaction.editReply(welcomeSection("⚠️ Set the welcome channel first — **Channels** section → 👋 Welcome channel."));
       const posted = await channel.send({ ...welcomePayload(), content: `<@${targetId}>` }).catch(() => null);
-      return interaction.update(welcomeSection(posted
+      return interaction.editReply(welcomeSection(posted
         ? `🧪 Test welcome posted in <#${channel.id}> for <@${targetId}> — exactly like a new member's.`
         : "❌ Could not post the test welcome — check that I can send messages in the welcome channel."));
     }
@@ -2214,12 +2255,14 @@ client.on(Events.InteractionCreate, async interaction => {
       if (type === "product") {
         const order = db.prepare("SELECT o.*,p.name product_name FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=? AND o.user_id=?").get(id, interaction.user.id);
         if (!order) return interaction.reply({ content: "Order not found.", ephemeral: true });
+        // اعتراف فوري قبل الكتابات ورسائل السجل واللوحات (شبكة كلها)
+        await interaction.deferReply({ flags: 64 }).catch(() => {});
         db.prepare("UPDATE orders SET rating=?,review=? WHERE id=?").run(rating, review, id);
         db.prepare("INSERT OR REPLACE INTO product_reviews (order_id,user_id,product_id,rating,review) VALUES (?,?,?,?,?)").run(id, interaction.user.id, order.product_id, rating, review);
         await sendToConfiguredChannel(interaction.guild, "reviews", { embeds: [embed("Product review", `Product: **${order.product_name}**\nCustomer: <@${interaction.user.id}>\nRating: ${rating}/5\nReview: ${review || "No written comment."}`)] });
         await refreshOrdersPanel(interaction.guild).catch(() => {});
         await refreshAdminDashboard(interaction.guild);
-        return interaction.reply({ content: "Thank you! Your product review has been saved.", ephemeral: true });
+        return interaction.editReply({ content: "Thank you! Your product review has been saved." }).catch(() => {});
       }
     }
   } catch (err) {
@@ -2228,6 +2271,18 @@ client.on(Events.InteractionCreate, async interaction => {
     if (interaction.deferred || interaction.replied) await interaction.followUp(message).catch(() => {});
     else await interaction.reply(message).catch(() => {});
   }
-});
+}
+
+// الالتقاط الأخير: `return interaction.reply(...)` يعيد وعداً خارج نطاق
+// الـtry (رفضه لا يمرّ بـcatch الداخلي)، وكان هذا بالضبط ما يُسقِط البوت —
+// 10062 Unknown interaction يرفض، الوعود تفلت، العملية تموت، وبعدها كل
+// ضغطة تنتهي بـ "didn't respond in time". الآن يُسجَّل ولا يُسقط.
+client.on(Events.InteractionCreate, (interaction) => handleInteraction(interaction).catch((err) => {
+  console.error("Interaction error:", err);
+  if (err && err.code === 10062) return; // التفاعل انتهت صلاحيته — الرد متأخر لا ينفع
+  const message = { content: "Something went wrong. Check the bot console and config.", ephemeral: true };
+  if (interaction.deferred || interaction.replied) interaction.followUp(message).catch(() => {});
+  else interaction.reply(message).catch(() => {});
+}));
 
 client.login(process.env.DISCORD_TOKEN);

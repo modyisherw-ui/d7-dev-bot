@@ -436,10 +436,28 @@ function ordersSection(statusText, opts = {}) {
     if (Object.prototype.hasOwnProperty.call(counts, r.status)) counts[r.status] = Number(r.n);
   }
   const total = counts.pending + counts.confirmed + counts.delivered + counts.cancelled;
+  // ── إحصائيات الشراء: قيمة ما تم تنفيذه فعلاً (دخل المتجر)، وما هو
+  // بانتظار تأكيد الدفع، وعدد المشترين — طلب صاحب اللوحة صراحةً:
+  // "فيه احصائيات الشراء والطلبات وكل شي". السعر والعملة في جدول
+  // المنتجات لا في جدول الطلبات، فنjoinهما، وكل عملة تُجمع وحدها حتى لا
+  // تُجمع الريال بالدولار في رقم واحد كاذب.
+  const sumBy = (statuses) => {
+    const q = `SELECT p.currency currency, SUM(p.price) v FROM orders o JOIN products p ON p.id=o.product_id
+               WHERE o.status IN (${statuses.map(() => "?").join(",")}) GROUP BY p.currency`;
+    return db.prepare(q).all(...statuses).map(r => formatPrice(r.v, r.currency));
+  };
+  const revenue = sumBy(["delivered"]);
+  const waitingValue = sumBy(["pending"]);
+  const buyers = Number(db.prepare("SELECT COUNT(DISTINCT user_id) n FROM orders").get().n);
+  const completedValue = revenue.length ? revenue.join(" + ") : formatPrice(0);
+  const waitingText = waitingValue.length ? waitingValue.join(" + ") : formatPrice(0);
   const stats = [
     `**Total orders:** ${total}`,
     `⏳ **Pending confirmation:** ${counts.pending} · 🚀 **In progress:** ${counts.confirmed}`,
     `✅ **Completed:** ${counts.delivered} · ❌ **Cancelled:** ${counts.cancelled}`,
+    "",
+    `💰 **Sales value (completed):** ${completedValue}`,
+    `🧾 **Awaiting confirmation:** ${waitingText} · 👥 **Buyers:** ${buyers}`,
   ].join("\n");
   const rowsData = db.prepare(`SELECT o.*,p.name product_name,p.price,p.currency FROM orders o JOIN products p ON p.id=o.product_id ORDER BY o.id DESC LIMIT 10`).all();
   // كل طلب سطراه بعده بسطر فارغ — قائمة تُقرأ طلباً طلباً لا ككتلة واحدة،
@@ -469,19 +487,20 @@ function ordersSection(statusText, opts = {}) {
     rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_status_ch", "orderStatus", "🚚 Pick the order status channel")));
     rows.push(new ActionRowBuilder().addComponents(channelRow("d7_prod_status_ch", "productStatus", "🔄 Pick the product status channel")));
   }
-  // ⬇️ صف الأزرار: خمسة أزرار كحدّ أقصى (حدّ ديسكورد). في اللوحة الخاصة
-  // يدخل Home هنا ويُستبعد Refresh (أي ضغطة تعيد الرسم أصلاً) لأن الصفوف
-  // بلغت خمسة: معلّق + ثلاث قوائم + الأزرار. وفي اللوحة المنشورة لا Home
-  // فيبقى Refresh — زر ⚠️ Delete All صار في شاشة الحذف منذ الجولة الماضية.
+  // ⬇️ صف الأزرار. اللوحة المنشورة = ثلاثة أزرار فقط كما طلبها صاحب
+  // اللوحة حرفياً: عرض المعلومات، حذف الطلب، تعديل الطلب. لا زر نشر ولا
+  // تحديث هناك — النشر يتم من /panel، والتحديث يحدث تلقائياً مع كل تغيير
+  // في الطلبات. وفي /panel يبقى الخمسة كاملة: الثلاثة + النشر + Home
+  // (الصفوف بلغت خمسة: معلّق + ثلاث قوائم + الأزرار، فلا يتّسع صف سادس).
   const buttons = [
     new ButtonBuilder().setCustomId("panel:orders:view").setLabel("👁️ View Details").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("panel:orders:del").setLabel("🗑️ Delete Order").setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId("panel:orders:edit").setLabel("✏️ Edit Order").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("panel:orders:publish").setLabel(published ? "📤 Move panel" : "📤 Publish panel").setStyle(ButtonStyle.Secondary),
-    published
-      ? new ButtonBuilder().setCustomId("panel:orders").setLabel("🔄 Refresh").setStyle(ButtonStyle.Primary)
-      : new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
   ];
+  if (!published) {
+    buttons.push(new ButtonBuilder().setCustomId("panel:orders:publish").setLabel("📤 Publish panel").setStyle(ButtonStyle.Secondary));
+    buttons.push(new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary));
+  }
   rows.push(new ActionRowBuilder().addComponents(buttons));
   return {
     content: statusText || undefined,
@@ -492,10 +511,11 @@ function ordersSection(statusText, opts = {}) {
       desc,
       ...(published ? [
         // لوحة الطلبات المنشورة: لا قوائم إعدادات ولا شرح طويل —
-        // طلبات فقط، والتفاصيل الكاملة خلف زر واحد.
+        // طلبات وإحصائيات فقط، وأزرارها ثلاثة كما طلب صاحب اللوحة.
         "",
         "📌 **Live panel** — refreshes itself every time an order is created, confirmed, changed or deleted.",
-        "Press **👁️ View Details**, pick an order, and get its full card: buyer, admin, product, price, times, rating and review.",
+        "**👁️ View Details** — pick an order and get its full card: buyer, admin, product, price, times, rating and review.",
+        "**🗑️ Delete Order** · **✏️ Edit Order** — manage an order straight from this message.",
       ] : [
         "",
         "Confirm payment from the menu above; the customer is granted the product role automatically.",
@@ -542,11 +562,11 @@ async function refreshOrdersPanel(guild) {
 function ordersPublishView() {
   return {
     embeds: [embed("📤 Publish the Orders list", [
-      "Pick the channel where the orders list becomes a **permanent message** — stats, recent orders, confirm menu, room picks and all the buttons.",
+      "Pick the channel — the bot posts the board there as a **permanent message**: purchase statistics, every order, and three buttons (👁️ View Details · 🗑️ Delete Order · ✏️ Edit Order).",
       "",
-      "It refreshes itself every time an order changes, and staff can delete or edit orders straight from it.",
+      "It refreshes itself every time an order changes, and staff can view, delete or edit orders straight from it.",
       "",
-      "Publishing again in another channel **moves** the panel (the old message is removed).",
+      "Publishing in another channel **moves** the board (the old message is removed).",
     ].join("\n"))],
     components: [
       new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder()

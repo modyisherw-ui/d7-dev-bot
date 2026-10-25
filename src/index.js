@@ -440,8 +440,10 @@ function ordersSection(statusText, opts = {}) {
     `✅ **Completed:** ${counts.delivered} · ❌ **Cancelled:** ${counts.cancelled}`,
   ].join("\n");
   const rowsData = db.prepare(`SELECT o.*,p.name product_name,p.price,p.currency FROM orders o JOIN products p ON p.id=o.product_id ORDER BY o.id DESC LIMIT 10`).all();
+  // كل طلب سطراه بعده بسطر فارغ — قائمة تُقرأ طلباً طلباً لا ككتلة واحدة،
+  // وإيموجي الحالة أسرع للعين من الكلمة وحدها
   const desc = rowsData.length
-    ? rowsData.map(o => `**#${o.id}** · ${o.product_name} · <@${o.user_id}> · **${o.status}** · ${formatPrice(o.price,o.currency)}\n⭐ ${o.rating ? `${o.rating}/5` : "no rating"}`).join("\n")
+    ? rowsData.map(o => `**#${o.id}** · ${o.product_name} · <@${o.user_id}> · ${(ORDER_STATUS[o.status]?.emoji || "")} **${o.status}** · ${formatPrice(o.price,o.currency)}\n⭐ ${o.rating ? `${o.rating}/5` : "no rating"}`).join("\n\n")
     : "No orders yet.";
   const pending = db.prepare(`SELECT o.id,o.user_id,p.name product_name,p.price,p.currency FROM orders o JOIN products p ON p.id=o.product_id WHERE o.status='pending' ORDER BY o.id DESC LIMIT 20`).all();
   const rows = [];
@@ -453,32 +455,36 @@ function ordersSection(statusText, opts = {}) {
         .setDescription(`${o.user_id} • ${formatPrice(o.price,o.currency)}`.slice(0, 100))
         .setValue(String(o.id))))));
   }
-  // ⬇️ سجل الطلبات: كل طلب وكل تغيير حالة ينزل برسالته الخاصة
-  // ملاحظة: الـ placeholder يظهر فقط لما ما يكون فيه روم محفوظ —
-  // ولو كان محفوظاً يظهر اسمه داخل القائمة مكانها، عشان كذا نذكره في نص الرسالة.
-  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_ch", "orders", "🛒 Pick the purchase log channel")));
-  // ⬇️ روم حالة الطلب: منفصل عن روم تسجيل الشراء عشان كل روم وظيفته وحدة —
-  // روم الشراء يسجّل إن الرتبة طلعت، وروم الحالة يتابع الطلب للنهاية.
-  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_order_status_ch", "orderStatus", "🚚 Pick the order status channel")));
-  // ⬇️ روم حالة المنتجات: /product-edit ينزل فيه رسالة لكل تغيير حالة
-  // (بلا روم محفوظ يظهر الـ placeholder، عشان يبان من أول مرة)
-  rows.push(new ActionRowBuilder().addComponents(channelRow("d7_prod_status_ch", "productStatus", "🔄 Pick the product status channel")));
-  // ⬇️ صف الأزرار: الحذف والتعديل أولًا (أغراض اللوحة)، ثم النشر والتحديث،
-  // ثم Home في اللوحة الخاصة فقط. خمسة أزرار كحدّ أقصى (حدّ ديسكورد).
-  // زر ⚠️ Delete All انتقل إلى شاشة الحذف نفسها — الصف كان ستة أزرار
-  // ولا يُنشر في روم أصلاً زر Home (سيحوّل رسالة الروم للوحة الرئيسية).
+  // ⬇️ قوائم الرومات الثلاث — في لوحة /panel فقط. صاحب اللوحة طلب لوحته
+  // نظيفة: طلبات وتفاصيل لا إعدادات. ودمجها في صف واحد يوفّر صفوفاً
+  // (ديسكورد: حتى 5 مكوّنات للصف، والقوائم لا تخلط مع الأزرار).
+  if (!published) {
+    // الـ placeholder يظهر فقط لما ما يكون فيه روم محفوظ — ولو كان محفوظاً
+    // يظهر اسمه داخل القائمة مكانها، عشان كذا نذكر كل روم في نص الرسالة.
+    rows.push(new ActionRowBuilder().addComponents(
+      channelRow("d7_order_ch", "orders", "🛒 Pick the purchase log channel"),
+      channelRow("d7_order_status_ch", "orderStatus", "🚚 Pick the order status channel"),
+      channelRow("d7_prod_status_ch", "productStatus", "🔄 Pick the product status channel"),
+    ));
+  }
+  // ⬇️ صف الأزرار: عرض التفاصيل أولاً (طلب الصاحب: زر يفتح بطاقة الطلب)،
+  // ثم الحذف والتعديل ثم النشر والتحديث — خمسة أزرار كحدّ أقصى (حدّ ديسكورد).
+  // زر Home ينزل لصفه الثاني في اللوحة الخاصة، ولا يُنشر في روم أصلاً
+  // لأنه سيحوّل رسالة الروم إلى اللوحة الرئيسية. زر ⚠️ Delete All صار في
+  // شاشة الحذف لأن صف الأزرار كان ستة أزرار.
   const buttons = [
+    new ButtonBuilder().setCustomId("panel:orders:view").setLabel("👁️ View Details").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("panel:orders:del").setLabel("🗑️ Delete Order").setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId("panel:orders:edit").setLabel("✏️ Edit Order").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId("panel:orders:publish").setLabel(published ? "📤 Move panel" : "📤 Publish panel").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("panel:orders").setLabel("🔄 Refresh").setStyle(ButtonStyle.Primary),
   ];
-  if (!published) buttons.push(new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary));
   rows.push(new ActionRowBuilder().addComponents(buttons));
-  // ديسكورد يخفي تسمية القائمة ما إن تحفظ قيمة داخلها ويعرض اسم الروم مكانها،
-  // فتصير القائمتين متشابهتين تماماً ولا يعرف أحد أي واحدة لأي غرض.
-  // عشان كذا نكتب الروم باسمه في نص الرسالة فوق القائمتين — هذا حصل فعلاً:
-  // المستخدم ضبط روم حالة المنتجات وظن أن الطلبات ستصله.
+  if (!published) {
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
+    ));
+  }
   return {
     content: statusText || undefined,
     embeds: [embed("🧾 Orders", [
@@ -486,17 +492,23 @@ function ordersSection(statusText, opts = {}) {
       "",
       "**Recent orders:**",
       desc,
-      "",
-      "Confirm payment from the menu above; the customer is granted the product role automatically.",
-      `**🛒 Purchase log: ${chLabel("orders")}** — set by the menu below. Every purchase posts a message with the role, buyer and price.`,
-      `**🚚 Order status: ${chLabel("orderStatus")}** — set by the menu below. Every confirmation, delivery or cancellation updates one status message per order.`,
-      `**🔄 Product status: ${chLabel("productStatus")}** — set by the menu below. Every product status change posts a message.`,
-      published
-        ? "\n📌 **Live panel** — this message refreshes itself every time an order is created, confirmed, changed or deleted."
-        : "\n📤 **Publish panel** puts this list in a channel as a permanent message everyone can see.",
+      ...(published ? [
+        // لوحة الطلبات المنشورة: لا قوائم إعدادات ولا شرح طويل —
+        // طلبات فقط، والتفاصيل الكاملة خلف زر واحد.
+        "",
+        "📌 **Live panel** — refreshes itself every time an order is created, confirmed, changed or deleted.",
+        "Press **👁️ View Details**, pick an order, and get its full card: buyer, admin, product, price, times, rating and review.",
+      ] : [
+        "",
+        "Confirm payment from the menu above; the customer is granted the product role automatically.",
+        `**🛒 Purchase log: ${chLabel("orders")}** — set by the menu below. Every purchase posts a message with the role, buyer and price.`,
+        `**🚚 Order status: ${chLabel("orderStatus")}** — set by the menu below. Every confirmation, delivery or cancellation updates one status message per order.`,
+        `**🔄 Product status: ${chLabel("productStatus")}** — set by the menu below. Every product status change posts a message.`,
+        "",
+        "📤 **Publish panel** puts this list in a channel as a permanent message everyone can see.",
+      ]),
     ].join("\n"))],
-    // خمسة صفوف كحد أقصى (حد ديسكورد) — وزر الحذف جاء في صف الأزرار
-    // الموجود لا في صف جديد، حتى لا يتعدى القسم الحد المسموح
+    // خمسة صفوف كحد أقصى (حد ديسكورد): معلّق + الرومات + الأزرار + Home = 4
     components: rows.slice(0, 5),
   };
 }
@@ -570,6 +582,46 @@ function orderEditStatusView(order) {
           .setStyle(a.style)
           .setDisabled(order.status === a.key))),
       new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("panel:orders").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+// ─────────── بطاقة الطلب الكاملة: كل ما يخص الطلب في إيمبد واحد ───────────
+// زر 👁️ View Details → اختيار الطلب → هذي البطاقة. مطلوب الصاحب صراحةً:
+// مين طلب، مين الأدامي، وكل ما يخص الطلب — بلا فتح أي رسالة أخرى.
+function orderDetailsView(order) {
+  const st = ORDER_STATUS[order.status] || { label: order.status || "Unknown", emoji: "ℹ️" };
+  // الوقت بصيغة ديسكورد <t:…:F> فيعرضه كل واحد بتوقيته المحلي وبلغته
+  const at = (v) => {
+    if (!v) return null;
+    const t = Date.parse(String(v).trim().replace(" ", "T").replace(/Z?$/, "Z"));
+    return Number.isNaN(t) ? String(v) : `<t:${Math.floor(t / 1000)}:F>`;
+  };
+  const lines = [
+    `**Product:** ${order.name || "—"} (ID ${order.product_id})`,
+    order.role_id ? `**Role:** <@&${order.role_id}>` : "",
+    `**Buyer:** <@${order.user_id}> — \`${order.user_id}\``,
+    `**Admin:** ${order.confirmed_by ? `<@${order.confirmed_by}> — \`${order.confirmed_by}\`` : "— not confirmed yet"}`,
+    `**Price:** ${formatPrice(order.price, order.currency)}`,
+    "",
+    `**Status:** ${st.emoji} ${st.label}`,
+    `**Ordered:** ${at(order.created_at) || "—"}`,
+    `**Confirmed:** ${at(order.confirmed_at) || "— not yet"}`,
+    `**Delivered:** ${at(order.delivered_at) || "— not yet"}`,
+    order.delivery_seconds !== null && order.delivery_seconds !== undefined && order.delivery_seconds !== ""
+      ? `**Delivery time:** ${Math.floor(Number(order.delivery_seconds) / 60)}m ${Number(order.delivery_seconds) % 60}s`
+      : "",
+    "",
+    `**Rating:** ${order.rating ? `⭐ ${order.rating}/5` : "Not rated yet"}`,
+    order.review ? `**Review:** ${order.review}` : "",
+  ].filter(Boolean);
+  return {
+    embeds: [embed(`📋 Order #${order.id} · ${st.emoji} ${st.label}`, lines.join("\n"))],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("panel:orders:view").setLabel("👁️ Another order").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("panel:orders").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
       ),
     ],
@@ -1398,6 +1450,16 @@ client.on(Events.InteractionCreate, async interaction => {
             });
           }
           if (flag === "publish") return interaction.update(ordersPublishView());
+          if (flag === "view") {
+            const viewRows = orderPickRows("d7_order_view_sel", "Pick an order to see its full details...");
+            if (!viewRows) return interaction.reply({ content: "There are no orders to view yet.", ephemeral: true });
+            return interaction.update({
+              embeds: [embed("👁️ View Order Details", "**Pick an order from the menu below.**\nYou'll get its full card: who ordered it, who the admin is, the product, the role, the price, every timestamp, the rating and the review.")],
+              components: [...viewRows, new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId("panel:orders").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+              )],
+            });
+          }
           if (flag === "edit") {
             const editRows = orderPickRows("d7_order_edit_sel", "Select the order to edit its status...");
             if (!editRows) return interaction.reply({ content: "There are no orders to edit.", ephemeral: true });
@@ -1754,6 +1816,14 @@ client.on(Events.InteractionCreate, async interaction => {
       await respondWith(interaction, ordersPanelPayload(interaction, `🗑️ Deleted order **#${id}** — its status message is being removed too.`)).catch(() => {});
       await removeOrderStatusMessage(interaction.guild, order).catch(() => {});
       return;
+    }
+
+    // ─────────── اختيار طلب لعرض بطاقته الكاملة ───────────
+    if (interaction.isStringSelectMenu() && interaction.customId === "d7_order_view_sel") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const order = orderForFeed(Number(interaction.values[0]));
+      if (!order) return interaction.reply({ content: "Order not found.", ephemeral: true });
+      return interaction.update(orderDetailsView(order));
     }
 
     // ─────────── اختيار طلب للتعديل: تعرض أزرار حالته الأربعة ───────────

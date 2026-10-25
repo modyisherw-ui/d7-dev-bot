@@ -187,3 +187,84 @@ S2A DEV bot online as S2A DEV#8569
 S2A DEV bot online as S2A DEV#8569
 (node:2405) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
 (Use `node --trace-warnings ...` to show where the warning was created)
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+DiscordAPIError[50035]: Invalid Form Body
+data.components[0].components[1][COMPONENT_LAYOUT_WIDTH_EXCEEDED]: The specified component exceeds the maximum width
+data.components[0].components[2][COMPONENT_LAYOUT_WIDTH_EXCEEDED]: The specified component exceeds the maximum width
+    at handleErrors (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/rest/dist/index.js:791:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async BurstHandler.runRequest (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/rest/dist/index.js:898:23)
+    at async _REST.request (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/@discordjs/rest/dist/index.js:1342:22)
+    at async ButtonInteraction.update (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/discord.js/src/structures/interfaces/InteractionResponses.js:354:22)
+Emitted 'error' event on Client instance at:
+    at emitUnhandledRejectionOrErr (node:events:402:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+  rawError: {
+    message: 'Invalid Form Body',
+    code: 50035,
+    errors: {
+      data: { components: { '0': { components: [Object] } } }
+    }
+  },
+  code: 50035,
+  status: 400,
+  method: 'POST',
+  url: 'https://discord.com/api/v10/interactions/1563892866940543077/aW50ZXJhY3Rpb246MTU2Mzg5Mjg2Njk0MDU0MzA3NzpYbDB6TmlQblhVeWFyV3FRbEZCYWRTNzNUNk9mbFN2RkQ2MGZCR3ZzTUhabUQ0SU1XM09BaloyM1lkSzhOQ2hDWkk3QUhSVmVQMFBZcDZGQmNXRzVISVkwU2tDOVhxNjUzYnlXcXdDRmVlMGlQMGlIVjVoc1FXT0REekZwNEQ2dQ/callback?with_response=false',
+  requestBody: {
+    files: [],
+    json: {
+      type: 7,
+      data: {
+        content: undefined,
+        tts: false,
+        nonce: undefined,
+        enforce_nonce: false,
+        embeds: [
+          {
+            color: 3121914,
+            thumbnail: [Object],
+            title: '🧾 Orders',
+            description: '**Total orders:** 1\n' +
+              '⏳ **Pending confirmation:** 0 · 🚀 **In progress:** 0\n' +
+              '✅ **Completed:** 1 · ❌ **Cancelled:** 0\n' +
+              '\n' +
+              '**Recent orders:**\n' +
+              '**#1** · v2 · <@1479172363768828086> · ✅ **delivered** · 100 SAR\n' +
+              '⭐ no rating\n' +
+              '\n' +
+              'Confirm payment from the menu above; the customer is granted the product role automatically.\n' +
+              '**🛒 Purchase log: <#1561446920986173440>** — set by the menu below. Every purchase posts a message with the role, buyer and price.\n' +
+              '**🚚 Order status: <#1562362584781561886>** — set by the menu below. Every confirmation, delivery or cancellation updates one status message per order.\n' +
+              '**🔄 Product status: <#1562362584781561886>** — set by the menu below. Every product status change posts a message.\n' +
+              '\n' +
+              '📤 **Publish panel** puts this list in a channel as a permanent message everyone can see.',
+            footer: [Object],
+            timestamp: '2026-10-25T12:31:56.056Z'
+          }
+        ],
+        components: [
+          { type: 1, components: [Array] },
+          { type: 1, components: [Array] },
+          { type: 1, components: [Array] }
+        ],
+        username: undefined,
+        avatar_url: undefined,
+        allowed_mentions: undefined,
+        flags: undefined,
+        message_reference: undefined,
+        attachments: undefined,
+        sticker_ids: undefined,
+        thread_name: undefined,
+        applied_tags: undefined,
+        poll: undefined,
+        shared_client_theme: undefined
+      }
+    }
+  }
+}
+
+Node.js v22.23.3
+S2A DEV bot online as S2A DEV#8569

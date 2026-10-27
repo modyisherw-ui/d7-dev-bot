@@ -71,6 +71,7 @@ function mainPanel() {
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("panel:perms").setLabel("Permissions").setEmoji("🔐").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("panel:ticket-stats").setLabel("Ticket Stats").setEmoji("📈").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("panel:rulebook").setLabel("Rules").setEmoji("📜").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("panel:refresh").setLabel("Refresh Dashboard").setEmoji("🔄").setStyle(ButtonStyle.Success)
   );
   const e = embed("S2A DEV • Control Center", [
@@ -86,8 +87,226 @@ function mainPanel() {
     "🏷️ **Auto Roles** — roles granted on join",
     "🔐 **Permissions** — bot managers and staff roles",
     "📈 **Ticket Stats** — ticket statistics",
+    "📜 **Rules** — the rule book: sections, banner and the published message",
   ].join("\n"));
   return { embeds: [e], components: [row1, row2, row3] };
+}
+
+// ─────────── نظام القوانين: رسالة واحدة + قائمة أقسام ───────────
+// الشكل المرجعي: رسالة السيرفر فيها العنوان والمقدمة (عربي ثم إنجليزي)
+// وصورة، وتحتها قائمة "اختر القسم". ضغط أي قسم يرد برسالة خاصة بقوانين
+// ذلك القسم مرقّمة (1- ، 2-) عربي ثم الإنجليزي. كل النصوص في config.rules
+// وتُحرَّر من داخل /panel — والملف يُزامَن مع المستودع كل دقيقتين.
+function ensureRules() {
+  const r = (config.rules ||= {});
+  r.title ??= "Server Rules | قوانين السيرفر";
+  r.image ??= "";
+  r.introAr ??= "أهلاً بكم في سيرفرنا، هذه القوانين وُضعت لراحتكم وسلامتكم، يرجى القراءة والالتزام بها";
+  r.introEn ??= "Welcome to our community. These rules are in place to ensure your comfort and maintain a safe, respectful environment for everyone. Please read and abide by them.";
+  r.noteEn ??= "All general server rules apply to this section";
+  r.noteAr ??= "جميع قوانين السيرفر العامة تنطبق على هذا القسم";
+  r.channelId ??= "";
+  r.messageId ??= "";
+  // البذرة الأولى فقط: مصفوفة فارغة عن قصد (حذفت كل الأقسام) لا تمتلئ من جديد
+  if (r.sections === undefined) {
+    r.sections = [{
+      id: "general",
+      name: "General Rules | القوانين العامة",
+      rules: [
+        { ar: "احترام الآخرين: الشتائم والألفاظ البذيئة والعنصرية أو الإيحاء بها ممنوع تمامًا.", en: "Mutual Respect: Insults, slurs, racism, or hinting at them are strictly prohibited." },
+        { ar: "المواضيع الحساسة: النقاشات السياسية أو الدينية غير مسموح بها.", en: "Sensitive Topics: Discussing political or religious topics is not allowed." },
+        { ar: "التشهير: الإضرار بسمعة أي شخص داخل السيرفر أو خارجه ممنوع تمامًا.", en: "Defamation: Damaging the reputation of anyone, whether inside or outside the server, is strictly forbidden." },
+        { ar: "الإعلانات: الترويج أو النشر أو الحديث عن سيرفرات ديسكورد أخرى ممنوع.", en: "Advertising: Promoting, sharing, or discussing other Discord servers is prohibited." },
+        { ar: "المحتوى المخل: نشر أو الإيحاء بأي محتوى إباحي أو NSFW ممنوع تمامًا.", en: "NSFW Content: Sharing or hinting at pornographic/NSFW content is strictly prohibited." },
+        { ar: "المضايقة: إزعاج أو مضايقة أعضاء السيرفر بأي شكل غير مسموح.", en: "Harassment: Harassing or bothering server members in any way is not allowed." },
+        { ar: "الملفات الشخصية: استخدام صور أو أسماء مستخدمين أو سطور وصفية غير لائقة ممنوع.", en: "Personal Profiles: Using inappropriate or offensive profile pictures (avatars), bios, or usernames is strictly prohibited." },
+        { ar: "التهرب من العقوبات: استخدام حسابات بديلة أو وهمية للتهرب من العقوبات ممنوع.", en: "Evasive Punishments: Using alternate or fake accounts to evade administrative actions (mutes or bans) is not allowed." },
+      ],
+    }];
+  }
+  if (!Array.isArray(r.sections)) r.sections = [];
+  return r;
+}
+
+// قصّ النص إلى حدّ وصف الإيمبد (4096) مع علامة في النهاية لا قطع فجائي
+function clip(text, max) {
+  const s = String(text || "");
+  return s.length <= max ? s : s.slice(0, Math.max(0, max - 1)) + "…";
+}
+
+// أرقام القسم: كل بند له رقم واحد يظهر في السطرين معاً (عربي وإنجليزي)
+function rulesLines(sec) {
+  const ar = [], en = [];
+  (sec?.rules || []).forEach((line, i) => {
+    if (line?.ar) ar.push(`${i + 1}- ${line.ar}`);
+    if (line?.en) en.push(`${i + 1}- ${line.en}`);
+  });
+  return { ar, en };
+}
+
+// بطاقة القسم كما يراها العضو: عربي مرقّم ثم إنجليزي ثم تنبيه الأقسام
+function rulesCardEmbed(sec) {
+  const r = ensureRules();
+  const { ar, en } = rulesLines(sec);
+  const parts = [];
+  if (ar.length) parts.push(ar.join("\n"));
+  if (en.length) parts.push(en.join("\n"));
+  const notes = [r.noteEn, r.noteAr].filter(Boolean);
+  if (notes.length) parts.push(notes.join("\n"));
+  return embed(clip(sec?.name || "Rules", 256), clip(parts.join("\n\n") || "No rules in this section yet.", 4000));
+}
+
+// ── الرسالة المنشورة: العنوان والمقدمة والصورة + قائمة الأقسام ──
+function rulesPublicPayload() {
+  const r = ensureRules();
+  const e = embed(clip(r.title, 256), clip([r.introAr, r.introEn].filter(Boolean).join("\n\n"), 4000));
+  if (r.image && /^https?:\/\//i.test(r.image)) e.setImage(r.image);
+  const rows = [];
+  // ديسكورد يسمح ب25 خياراً في القائمة وحدها في صفها — قانون واحد لكل صف
+  if (r.sections.length) {
+    rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+      .setCustomId("d7_rules_section")
+      .setPlaceholder("إختر القسم — Pick a section")
+      .setMinValues(1).setMaxValues(1)
+      .addOptions(r.sections.slice(0, 25).map(s => new StringSelectMenuOptionBuilder()
+        .setLabel(String(s.name || "Section").slice(0, 100))
+        .setDescription(`${(s.rules || []).length} rule(s)`.slice(0, 100))
+        .setValue(String(s.id).slice(0, 100))))));
+  }
+  return { embeds: [e], components: rows };
+}
+
+// ── شاشة القسم داخل اللوحة: معاينة + أزرار التحرير ──
+function rulesSectionView(sec) {
+  const card = rulesCardEmbed(sec);
+  const desc = clip(`${card.data.description}\n\n---\n**Staff preview** — this is exactly what a member gets when they pick this section from the menu.`, 4000);
+  return {
+    embeds: [card.setDescription(desc)],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`panel:rulebook:edit:${sec.id}`).setLabel("✏️ Edit rules").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`panel:rulebook:del:${sec.id}`).setLabel("🗑️ Delete section").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("panel:rulebook").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+    )],
+  };
+}
+
+// ── شاشة القسم داخل اللوحة الرئيسية للقوانين ──
+function rulesSection(statusText) {
+  const r = ensureRules();
+  const where = r.messageId && safeChannelId(r.channelId)
+    ? `Published in <#${r.channelId}> — it repaints itself whenever a section or this message changes.`
+    : "**Not published yet** — press **📤 Publish** and pick the room.";
+  const list = r.sections.length
+    ? r.sections.map((s, i) => `${i + 1}. **${s.name}** — ${(s.rules || []).length} rule(s)`).join("\n")
+    : "No sections yet — press **➕ Add section**.";
+  const lines = [];
+  if (statusText) lines.push(`**${statusText}**`, "");
+  lines.push(
+    `**Message:** ${where}`,
+    `**Banner:** ${r.image ? "✅ image set" : "❌ no image yet"}`,
+    `**Sections:** ${r.sections.length} (max 25 — one menu, one section per entry)`,
+    "",
+    list,
+    "",
+    "**How it works** — pick a section to edit it, or press **📤 Publish** to place the message in a room. Members open its menu and each choice answers with that section's rules in a private reply."
+  );
+  const e = embed("Control Center · Rules", lines.join("\n"));
+  const rows = [];
+  // قائمة الأقسام (صفّها وحده) ثم صف الأزرار — صفان فقط، والحد خمسة
+  if (r.sections.length) {
+    rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+      .setCustomId("d7_rulebook_sel")
+      .setPlaceholder("Pick a section to view or edit...")
+      .setMinValues(1).setMaxValues(1)
+      .addOptions(r.sections.slice(0, 25).map(s => new StringSelectMenuOptionBuilder()
+        .setLabel(String(s.name || "Section").slice(0, 100))
+        .setDescription(`${(s.rules || []).length} rule(s)`.slice(0, 100))
+        .setValue(String(s.id).slice(0, 100))))));
+  }
+  rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("panel:rulebook:add").setLabel("➕ Add section").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("panel:rulebook:settings").setLabel("✍️ Title & intro").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("panel:rulebook:publish").setLabel("📤 Publish").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("panel:home").setLabel("🏠 Home").setStyle(ButtonStyle.Secondary),
+  ));
+  return { embeds: [e], components: rows };
+}
+
+// شاشة اختيار الروم لنشر رسالة القوانين
+function rulesPublishView() {
+  const r = ensureRules();
+  const current = safeChannelId(r.channelId) ? [r.channelId] : (safeChannelId(config.channels?.rules) ? [config.channels.rules] : []);
+  return {
+    embeds: [embed("📤 Publish the Rules message", [
+      "Pick the room — the bot posts the rules there as a **permanent message**: the intro, the banner, and the section menu.",
+      "",
+      "Members pick a section from the menu and get that section's rules in a private reply.",
+      "",
+      "Publishing in the same room **updates the message in place**; another room **moves** it (the old message is removed).",
+    ].join("\n"))],
+    components: [
+      new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder()
+        .setCustomId("d7_rules_publish_ch")
+        .setPlaceholder("Pick the room for the rules message")
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        .setMinValues(1).setMaxValues(1)
+        .setDefaultChannels(current)),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("panel:rulebook").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+// طلب أقسام داخل رسالة — عنوان ومقدمة وصورة. القيم تُملأ فقط إن وُجدت
+// (رسالة فارغة لا تُرسل قيمة فارغة لنموذج مطلوب)
+function rulesSettingsModal() {
+  const r = ensureRules();
+  const field = (b, v) => (v ? b.setValue(String(v)) : b);
+  return new ModalBuilder().setCustomId("rules_settings").setTitle("Rules message")
+    .addComponents(
+      new ActionRowBuilder().addComponents(field(new TextInputBuilder().setCustomId("title").setLabel("Title (Arabic | English)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256), r.title)),
+      new ActionRowBuilder().addComponents(field(new TextInputBuilder().setCustomId("ar").setLabel("Arabic intro").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000), r.introAr)),
+      new ActionRowBuilder().addComponents(field(new TextInputBuilder().setCustomId("en").setLabel("English intro").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000), r.introEn)),
+      new ActionRowBuilder().addComponents(field(new TextInputBuilder().setCustomId("image").setLabel("Banner image URL (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(300), r.image)),
+    );
+}
+
+// نموذج قسم: الاسم، ثم سطور عربية سطر لكل بند، ثم سطور إنجليزية بنفس الترتيب
+function rulesSectionModal(sec) {
+  const arLines = (sec?.rules || []).map(l => l.ar || "").join("\n");
+  const enLines = (sec?.rules || []).map(l => l.en || "").join("\n");
+  const field = (b, v) => (v ? b.setValue(v) : b);
+  const m = new ModalBuilder()
+    .setCustomId(sec ? `rules_sec:${sec.id}` : "rules_sec:new")
+    .setTitle(sec ? "Edit section" : "Add section");
+  return m.addComponents(
+    new ActionRowBuilder().addComponents(field(new TextInputBuilder().setCustomId("name").setLabel("Section name (Arabic | English)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100), sec?.name)),
+    new ActionRowBuilder().addComponents(field(new TextInputBuilder().setCustomId("ar").setLabel("Arabic rules — one per line").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(3000), arLines)),
+    new ActionRowBuilder().addComponents(field(new TextInputBuilder().setCustomId("en").setLabel("English rules — one per line").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(3000), enLines)),
+  );
+}
+
+// سطور النموذج ← بنود: السطر رقمها هو رقم البند في اللغتين معاً
+function rulesFromFields(interaction) {
+  const lines = (v) => String(v || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const ar = lines(interaction.fields.getTextInputValue("ar"));
+  const en = lines(interaction.fields.getTextInputValue("en"));
+  const n = Math.max(ar.length, en.length);
+  const rules = [];
+  for (let i = 0; i < n; i++) rules.push({ ar: ar[i] || "", en: en[i] || "" });
+  return { name: String(interaction.fields.getTextInputValue("name") || "").trim().slice(0, 100), rules };
+}
+
+// ── إعادة رسم الرسالة المنشورة بعد أي تغيير (قسم جديد، تعديل، حذف) ──
+async function refreshRulesMessage(guild) {
+  const r = ensureRules();
+  if (!r.messageId || !safeChannelId(r.channelId) || !guild?.channels) return false;
+  const channel = guild.channels.cache?.get(r.channelId) || await guild.channels.fetch?.(r.channelId).catch(() => null);
+  if (!channel?.isTextBased() || !channel.messages?.fetch) return false;
+  const msg = await channel.messages.fetch(r.messageId).catch(() => null);
+  if (!msg?.edit) return false;
+  return !!(await msg.edit(rulesPublicPayload()).catch(() => null));
 }
 
 // ─────────── قسم المنتجات ───────────
@@ -1567,6 +1786,29 @@ async function handleInteraction(interaction) {
           return interaction.update(ordersPanelPayload(interaction));
         }
         if (section === "tickets") return interaction.update(ticketsSection());
+        if (section === "rulebook") {
+          const flag = parts[1];
+          const book = ensureRules();
+          if (flag === "publish") return interaction.update(rulesPublishView());
+          if (flag === "settings") return interaction.showModal(rulesSettingsModal());
+          if (flag === "add") return interaction.showModal(rulesSectionModal(null));
+          if (flag === "edit") {
+            const sec = book.sections.find(s => s.id === parts[2]);
+            if (!sec) return interaction.reply({ content: "❌ That section no longer exists.", ephemeral: true });
+            return interaction.showModal(rulesSectionModal(sec));
+          }
+          if (flag === "del") {
+            const idx = book.sections.findIndex(s => s.id === parts[2]);
+            if (idx < 0) return interaction.reply({ content: "❌ That section no longer exists.", ephemeral: true });
+            const [gone] = book.sections.splice(idx, 1);
+            saveConfig();
+            // الردّ أولًا (اعتراف بالضغط) ثم تحديث الرسالة المنشورة خلفه
+            await interaction.update(rulesSection(`🗑️ Removed **${gone.name}** — the published message was updated too.`)).catch(() => {});
+            await refreshRulesMessage(interaction.guild).catch(() => {});
+            return;
+          }
+          return interaction.update(rulesSection());
+        }
         if (section === "channels") return interaction.update(channelsSection());
         if (section === "ratings") return interaction.update(ratingsSection());
         if (section === "store") {
@@ -1952,6 +2194,95 @@ async function handleInteraction(interaction) {
         await interaction.guild.channels.cache.get(channelId)?.send({ embeds: [productEmbed(product)], components: productPanelRows(product.id) }).then(() => sent++).catch(() => {});
       }
       return interaction.editReply({ content: `✅ Published ${sent} product(s) in <#${channelId}>.` }).catch(() => {});
+    }
+
+    // ─────────── نظام القوانين: القائمة المنشورة واختيار القسم ───────────
+    // رسالة واحدة منشورة فيها قائمة الأقسام — ضغط أي قسم يرد برسالة خاصة
+    // بقوانينه مرقّمة عربي ثم إنجليزي، بلا صلاحية مطلوبة (القوانين عامة).
+    if (interaction.isStringSelectMenu() && interaction.customId === "d7_rules_section") {
+      const sec = ensureRules().sections.find(s => s.id === interaction.values[0]);
+      if (!sec) return interaction.reply({ content: "❌ This section no longer exists.", ephemeral: true });
+      return interaction.reply({ embeds: [rulesCardEmbed(sec)], ephemeral: true });
+    }
+
+    // قائمة الأقسام داخل /panel — لعرض قسم وتحريره (staff فقط)
+    if (interaction.isStringSelectMenu() && interaction.customId === "d7_rulebook_sel") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const sec = ensureRules().sections.find(s => s.id === interaction.values[0]);
+      if (!sec) return interaction.reply({ content: "❌ That section no longer exists.", ephemeral: true });
+      return interaction.update(rulesSectionView(sec));
+    }
+
+    // اختيار روم لنشر رسالة القوانين
+    if (interaction.isChannelSelectMenu() && interaction.customId === "d7_rules_publish_ch") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      // اعتراف فوري: ما بعده جلب روم ورسالة ونشر أو نقل — شبكة كلها
+      await interaction.deferReply({ flags: 64 }).catch(() => {});
+      const channelId = interaction.values[0];
+      const channel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch?.(channelId).catch(() => null);
+      if (!channel?.isTextBased()) return interaction.editReply({ content: "That channel is not available to me." }).catch(() => {});
+      const book = ensureRules();
+      const payload = rulesPublicPayload();
+      // نفس الروم الذي نُشرت فيه → نُعيد كتابتها في مكانها لا نكدّس نسخاً
+      if (book.messageId && book.channelId === channelId) {
+        const old = await channel.messages?.fetch?.(book.messageId).catch(() => null);
+        if (old?.edit) {
+          await old.edit(payload).catch(() => {});
+          return interaction.editReply(rulesSection(`✅ Rules message updated in <#${channelId}>.`)).catch(() => {});
+        }
+      }
+      const sent = await channel.send(payload).catch(() => null);
+      if (!sent) return interaction.editReply({ content: `❌ Could not post there — check that I can send messages in <#${channelId}>.` }).catch(() => {});
+      // نقل إلى روم آخر → نحذف الرسالة القديمة حتى لا تبقى قوانين مكرّرة
+      if (book.messageId && book.channelId !== channelId) {
+        const oldChannel = interaction.guild.channels.cache.get(book.channelId);
+        const old = await oldChannel?.messages?.fetch?.(book.messageId).catch(() => null);
+        if (old?.delete) await old.delete().catch(() => {});
+      }
+      book.channelId = channelId;
+      book.messageId = String(sent.id);
+      saveConfig();
+      return interaction.editReply(rulesSection(`✅ Rules published in <#${channelId}> — members pick a section from its menu.`)).catch(() => {});
+    }
+
+    // ─────────── نماذج القوانين: قسم جديد أو محرَّر، وعنوان الرسالة ───────────
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("rules_sec:")) {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const key = interaction.customId.split(":")[1];
+      const { name, rules } = rulesFromFields(interaction);
+      if (!name) return interaction.reply({ content: "❌ The section name is required.", ephemeral: true });
+      if (!rules.length) return interaction.reply({ content: "❌ Write at least one rule — one per line.", ephemeral: true });
+      const book = ensureRules();
+      let sec;
+      if (key === "new") {
+        if (book.sections.length >= 25) return interaction.reply({ content: "❌ Discord allows 25 sections in one menu.", ephemeral: true });
+        sec = { id: `s${Date.now().toString(36)}`, name, rules };
+        book.sections.push(sec);
+      } else {
+        sec = book.sections.find(s => s.id === key);
+        if (!sec) return interaction.reply({ content: "❌ That section no longer exists.", ephemeral: true });
+        sec.name = name;
+        sec.rules = rules;
+      }
+      saveConfig();
+      // الردّ أولًا (اعتراف بالضغط) ثم تحديث الرسالة المنشورة خلفه
+      await respondWith(interaction, rulesSectionView(sec)).catch(() => {});
+      await refreshRulesMessage(interaction.guild).catch(() => {});
+      return;
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId === "rules_settings") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const book = ensureRules();
+      book.title = String(interaction.fields.getTextInputValue("title") || "").trim().slice(0, 256) || book.title;
+      book.introAr = String(interaction.fields.getTextInputValue("ar") || "").trim();
+      book.introEn = String(interaction.fields.getTextInputValue("en") || "").trim();
+      const img = String(interaction.fields.getTextInputValue("image") || "").trim();
+      book.image = /^https?:\/\//i.test(img) ? img : "";
+      saveConfig();
+      await respondWith(interaction, rulesSection("✅ Title, intro and banner saved.")).catch(() => {});
+      await refreshRulesMessage(interaction.guild).catch(() => {});
+      return;
     }
 
     // ─────────── اختيار رومات التنبيهات والنشر ───────────

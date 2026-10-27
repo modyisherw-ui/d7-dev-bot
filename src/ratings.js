@@ -148,10 +148,23 @@ async function handleCommentModal(interaction) {
   // مقطوعة: زر product_rate الذي كان يكتب التقييم في الطلب لا يبنيه أحد
   // أصلاً، فبقي orders.rating فارغاً مهما تقيّم العميل وظهر "no rating" دائماً.
   // داخل try: فشل هذا لا يجب أن يمنع ردّ النافذة وإلا انتهى وقت التفاعل.
+  // يُرجع رقم الطلب الذي كُتب فيه التقييم — المُستدعِي يعيد بعده رسم رسالة
+  // حالة الطلب واللوحة المنشورة، وإلا يبقى "no rating" و"لم يتم التقييم"
+  // على الشاشة رغم أن التقييم وصل قاعدة البيانات.
+  let ratedOrderId = null;
   try {
     const pidKey = Number.isFinite(Number(pid)) ? Number(pid) : String(pid);
-    const oid = db.prepare(`SELECT id FROM orders WHERE user_id=? AND product_id=? AND status IN ('confirmed','delivered') ORDER BY id DESC LIMIT 1`).get(interaction.user.id, pidKey);
-    if (oid) db.prepare("UPDATE orders SET rating=?, review=? WHERE id=?").run(stars, comment, oid.id);
+    let oid = db.prepare(`SELECT id FROM orders WHERE user_id=? AND product_id=? AND status IN ('confirmed','delivered') ORDER BY id DESC LIMIT 1`).get(interaction.user.id, pidKey);
+    // ما لقينا طلباً مؤكَّداً أو مسلَّماً (مثلاً طلب لا يزال معلّقاً أو
+    // طلب صاحب الاختبار) → آخر طلب لهذا العميل والمنتج أيًا كانت حالته،
+    // بدل أن يبقى orders.rating فارغاً بصمت وتظهر اللوحة "no rating".
+    if (!oid) oid = db.prepare(`SELECT id FROM orders WHERE user_id=? AND product_id=? ORDER BY id DESC LIMIT 1`).get(interaction.user.id, pidKey);
+    if (oid) {
+      db.prepare("UPDATE orders SET rating=?, review=? WHERE id=?").run(stars, comment, oid.id);
+      ratedOrderId = Number(oid.id);
+    } else {
+      console.warn(`تقييم ${interaction.user.id} للمنتج ${pid}: لا يوجد طلب يحمله — لم يُكتب في orders`);
+    }
   } catch (e) {
     console.warn("تعذّر كتابة تقييم العميل على الطلب: " + e.message);
   }
@@ -192,6 +205,9 @@ async function handleCommentModal(interaction) {
       components: [],
     });
   } catch (_) {}
+
+  // رقم الطلب الذي حمل التقييم — يُعاد للمُستدعِي كي يُعيد رسم رسالته ولوحته
+  return ratedOrderId;
 }
 
 module.exports = { sendPurchaseDM, handleLangButton, handleStarButton, handleCommentModal, getProducts, findProduct, getByRole, saveRatingConfig };

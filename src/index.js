@@ -943,6 +943,24 @@ async function postOrderFeed(guild, order, extra) {
   return true;
 }
 
+// ─────────── بعد كتابة التقييم: أعد رسم ما يعرضه ───────────
+// رسالة حالة الطلب واللوحة المنشورة تقرؤان orders.rating وقت الرسم فقط،
+// فكتابة التقييم وحدها لا تحرّك شيئاً على الشاشة: بقي "لم يتم التقييم"
+// في رسالة الحالة و"no rating" في لوحة الإحصاءات رغم أن التقييم سُجّل.
+async function repaintAfterRating(guild, orderId) {
+  if (!guild || !orderId) return;
+  try {
+    const order = orderForFeed(Number(orderId));
+    if (!order) return;
+    // ما ننشر رسالة حالة جديدة لمطلب لم تُنشأ له — نُحيّن المنشورة فقط
+    if (order.status_msg_id) await postOrderFeed(guild, order);
+    await refreshOrdersPanel(guild).catch(() => {});
+    await refreshAdminDashboard(guild).catch(() => {});
+  } catch (err) {
+    console.warn("repaintAfterRating: " + err.message);
+  }
+}
+
 // ─────────── "شراء جديد" — نفس الشكل للمسارين ───────────
 // المسار الأول: زر شراء (ينشئ طلباً بانتظار التأكيد). المسار الثاني: منح رتبة
 // يدوياً ثم موافقة الموظف (ما يخلق طلباً) — لذلك لا نذكر رقماً غير موجود في الثاني.
@@ -2024,7 +2042,17 @@ async function handleInteraction(interaction) {
     // ─────────── نظام التقييمات (نسخة من NSR Hub) ───────────
     if (interaction.isButton() && interaction.customId.startsWith("rate_lang_")) return ratings.handleLangButton(interaction);
     if (interaction.isButton() && interaction.customId.startsWith("rate_star_")) return ratings.handleStarButton(interaction);
-    if (interaction.isModalSubmit() && interaction.customId.startsWith("rate_comment_")) return ratings.handleCommentModal(interaction);
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("rate_comment_")) {
+      // التقييم يُكتب في orders.rating داخل الدالة — وبعدها نُعيد رسم رسالة
+      // حالة الطلب واللوحة المنشورة، وإلا يبقى "لم يتم التقييم" و"no rating"
+      // ظاهرين رغم أن التقييم وصل قاعدة البيانات (شكوى صاحب البوت حرفياً).
+      const ratedOrderId = await ratings.handleCommentModal(interaction);
+      // النافذة قد تأتي من خاص العميل (لا guild هناك) → نأخذ الخادم من الوصلة
+      const rateGuildId = interaction.customId.split("_")[2];
+      const rateGuild = interaction.guild || interaction.client?.guilds?.cache?.get(rateGuildId);
+      await repaintAfterRating(rateGuild, ratedOrderId);
+      return;
+    }
     if (interaction.isButton() && interaction.customId === "d7_rate_send") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       const modal = new ModalBuilder().setCustomId("d7_rate_send_modal").setTitle("Send a rating to a customer");
@@ -2260,8 +2288,9 @@ async function handleInteraction(interaction) {
         db.prepare("UPDATE orders SET rating=?,review=? WHERE id=?").run(rating, review, id);
         db.prepare("INSERT OR REPLACE INTO product_reviews (order_id,user_id,product_id,rating,review) VALUES (?,?,?,?,?)").run(id, interaction.user.id, order.product_id, rating, review);
         await sendToConfiguredChannel(interaction.guild, "reviews", { embeds: [embed("Product review", `Product: **${order.product_name}**\nCustomer: <@${interaction.user.id}>\nRating: ${rating}/5\nReview: ${review || "No written comment."}`)] });
-        await refreshOrdersPanel(interaction.guild).catch(() => {});
-        await refreshAdminDashboard(interaction.guild);
+        // التقييم وصل الطلب — أعد رسم رسالة الحالة (تقرأ rating وقت الرسم)
+        // واللوحة المنشورة، وإلا بقي "لم يتم التقييم" و"no rating" كما هما
+        await repaintAfterRating(interaction.guild, id);
         return interaction.editReply({ content: "Thank you! Your product review has been saved." }).catch(() => {});
       }
     }

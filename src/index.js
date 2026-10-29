@@ -184,7 +184,7 @@ function rulesSectionView(sec) {
     embeds: [card.setDescription(desc)],
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`panel:rulebook:edit:${sec.id}`).setLabel("✏️ Edit rules").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`panel:rulebook:del:${sec.id}`).setLabel("🗑️ Delete section").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`panel:rulebook:delask:${sec.id}`).setLabel("🗑️ Delete section").setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId("panel:rulebook").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
     )],
   };
@@ -212,11 +212,12 @@ function rulesSection(statusText) {
   );
   const e = embed("Control Center · Rules", lines.join("\n"));
   const rows = [];
-  // قائمة الأقسام (صفّها وحده) ثم صف الأزرار — صفان فقط، والحد خمسة
+  // قائمة الأقسام (صفّها وحده) ثم صف الخمسة أزرار ثم صف الزر واحد —
+  // ثلاثة صفوف فقط، والحد الأقصى خمسة
   if (r.sections.length) {
     rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
       .setCustomId("d7_rulebook_sel")
-      .setPlaceholder("Pick a section to view or edit...")
+      .setPlaceholder("Pick a section to view it...")
       .setMinValues(1).setMaxValues(1)
       .addOptions(r.sections.slice(0, 25).map(s => new StringSelectMenuOptionBuilder()
         .setLabel(String(s.name || "Section").slice(0, 100))
@@ -225,11 +226,57 @@ function rulesSection(statusText) {
   }
   rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("panel:rulebook:add").setLabel("➕ Add section").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("panel:rulebook:settings").setLabel("✍️ Title & intro").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("panel:rulebook:editlist").setLabel("✏️ Edit sections").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("panel:rulebook:dellist").setLabel("🗑️ Delete sections").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId("panel:rulebook:settings").setLabel("✍️ Title & intro").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("panel:rulebook:publish").setLabel("📤 Publish").setStyle(ButtonStyle.Secondary),
+  ));
+  rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("panel:home").setLabel("🏠 Home").setStyle(ButtonStyle.Secondary),
   ));
   return { embeds: [e], components: rows };
+}
+
+// ── شاشة اختيار قسم للتعديل أو للحذف: قائمة الأقسام ثم زر رجوع ──
+function rulesPickView(mode) {
+  const r = ensureRules();
+  const editing = mode === "edit";
+  if (!r.sections.length) return rulesSection("There are no sections yet — press **➕ Add section** first.");
+  return {
+    embeds: [embed(editing ? "✏️ Edit a section" : "🗑️ Delete a section", editing
+      ? "Pick the section you want to edit — you'll get a form with its name, its Arabic rules and its English rules, **one rule per line**. The line number is the rule number in both languages."
+      : "Pick the section you want to delete. You'll get a **confirmation step** first, and the published message updates the moment it is removed.")],
+    components: [
+      new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+        .setCustomId(editing ? "d7_rulebook_edit_sel" : "d7_rulebook_del_sel")
+        .setPlaceholder(editing ? "Pick the section to edit..." : "Pick the section to delete...")
+        .setMinValues(1).setMaxValues(1)
+        .addOptions(r.sections.slice(0, 25).map(s => new StringSelectMenuOptionBuilder()
+          .setLabel(String(s.name || "Section").slice(0, 100))
+          .setDescription(`${(s.rules || []).length} rule(s)`.slice(0, 100))
+          .setValue(String(s.id).slice(0, 100))))),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("panel:rulebook").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+// ── شاشة تأكيد حذف قسم — الحذف خطوة لا رجعة فيها فلا ينفَّذ بضغطة واحدة ──
+function rulesDeleteConfirm(sec) {
+  return {
+    embeds: [embed("⚠️ Delete this section?", [
+      `**${sec.name}** — ${(sec.rules || []).length} rule(s)`,
+      "",
+      "It disappears from the published menu immediately, and the message repaints itself.",
+      "",
+      "Press **Confirm** to delete it, or **Back** to keep it.",
+    ].join("\n"))],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`panel:rulebook:del:${sec.id}`).setLabel("⚠️ Confirm delete").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("panel:rulebook").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+    )],
+  };
 }
 
 // شاشة اختيار الروم لنشر رسالة القوانين
@@ -1792,6 +1839,13 @@ async function handleInteraction(interaction) {
           if (flag === "publish") return interaction.update(rulesPublishView());
           if (flag === "settings") return interaction.showModal(rulesSettingsModal());
           if (flag === "add") return interaction.showModal(rulesSectionModal(null));
+          if (flag === "editlist") return interaction.update(rulesPickView("edit"));
+          if (flag === "dellist") return interaction.update(rulesPickView("del"));
+          if (flag === "delask") {
+            const ask = book.sections.find(s => s.id === parts[2]);
+            if (!ask) return interaction.reply({ content: "❌ That section no longer exists.", ephemeral: true });
+            return interaction.update(rulesDeleteConfirm(ask));
+          }
           if (flag === "edit") {
             const sec = book.sections.find(s => s.id === parts[2]);
             if (!sec) return interaction.reply({ content: "❌ That section no longer exists.", ephemeral: true });
@@ -2205,11 +2259,14 @@ async function handleInteraction(interaction) {
       return interaction.reply({ embeds: [rulesCardEmbed(sec)], ephemeral: true });
     }
 
-    // قائمة الأقسام داخل /panel — لعرض قسم وتحريره (staff فقط)
-    if (interaction.isStringSelectMenu() && interaction.customId === "d7_rulebook_sel") {
+    // قوائم الأقسام الثلاث داخل /panel: عرض قسم، اختيار قسم للتعديل،
+    // وانتخاب قسم للحذف (يفتح شاشة التأكيد) — كلها staff فقط
+    if (interaction.isStringSelectMenu() && ["d7_rulebook_sel", "d7_rulebook_edit_sel", "d7_rulebook_del_sel"].includes(interaction.customId)) {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
       const sec = ensureRules().sections.find(s => s.id === interaction.values[0]);
       if (!sec) return interaction.reply({ content: "❌ That section no longer exists.", ephemeral: true });
+      if (interaction.customId === "d7_rulebook_edit_sel") return interaction.showModal(rulesSectionModal(sec));
+      if (interaction.customId === "d7_rulebook_del_sel") return interaction.update(rulesDeleteConfirm(sec));
       return interaction.update(rulesSectionView(sec));
     }
 

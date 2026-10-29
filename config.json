@@ -106,45 +106,6 @@
     "noteAr": "جميع قوانين السيرفر العامة تنطبق على هذا القسم",
     "channelId": "1561445632701636760",
     "messageId": "1565370938957238516",
-    "sections": [
-      {
-        "id": "general",
-        "name": "General Rules | القوانين العامة",
-        "rules": [
-          {
-            "ar": "احترام الآخرين: الشتائم والألفاظ البذيئة والعنصرية أو الإيحاء بها ممنوع تمامًا.",
-            "en": "Mutual Respect: Insults, slurs, racism, or hinting at them are strictly prohibited."
-          },
-          {
-            "ar": "المواضيع الحساسة: النقاشات السياسية أو الدينية غير مسموح بها.",
-            "en": "Sensitive Topics: Discussing political or religious topics is not allowed."
-          },
-          {
-            "ar": "التشهير: الإضرار بسمعة أي شخص داخل السيرفر أو خارجه ممنوع تمامًا.",
-            "en": "Defamation: Damaging the reputation of anyone, whether inside or outside the server, is strictly forbidden."
-          },
-          {
-            "ar": "الإعلانات: الترويج أو النشر أو الحديث عن سيرفرات ديسكورد أخرى ممنوع.",
-            "en": "Advertising: Promoting, sharing, or discussing other Discord servers is prohibited."
-          },
-          {
-            "ar": "المحتوى المخل: نشر أو الإيحاء بأي محتوى إباحي أو NSFW ممنوع تمامًا.",
-            "en": "NSFW Content: Sharing or hinting at pornographic/NSFW content is strictly prohibited."
-          },
-          {
-            "ar": "المضايقة: إزعاج أو مضايقة أعضاء السيرفر بأي شكل غير مسموح.",
-            "en": "Harassment: Harassing or bothering server members in any way is not allowed."
-          },
-          {
-            "ar": "الملفات الشخصية: استخدام صور أو أسماء مستخدمين أو سطور وصفية غير لائقة ممنوع.",
-            "en": "Personal Profiles: Using inappropriate or offensive profile pictures (avatars), bios, or usernames is strictly prohibited."
-          },
-          {
-            "ar": "التهرب من العقوبات: استخدام حسابات بديلة أو وهمية للتهرب من العقوبات ممنوع.",
-            "en": "Evasive Punishments: Using alternate or fake accounts to evade administrative actions (mutes or bans) is not allowed."
-          }
-        ]
-      }
-    ]
+    "sections": []
   }
 }

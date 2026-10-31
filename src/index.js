@@ -81,7 +81,7 @@ function mainPanel() {
     "📌 **Channels** — announcement and publishing channels",
     "📝 **Messages** — news, rules and embeds",
     "⭐ **Ratings** — the ratings system and its channel",
-    "📊 **Analytics** — sales and ratings",
+    "📊 **Analytics** — purchases per product + ratings, and send the board to a room",
     "🛒 **Store Settings** — purchase and DM settings",
     "👋 **Welcome** — DM greeting, links and image",
     "🏷️ **Auto Roles** — roles granted on join",
@@ -366,7 +366,9 @@ function productsSection(message) {
       new ButtonBuilder().setCustomId("panel:add-product").setLabel("Add Product").setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId("panel:publish-products").setLabel("Publish Showcase").setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("panel:products-list").setLabel("Refresh List").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("panel:delete-product").setLabel("🗑️ Delete Product").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId("panel:delete-product").setLabel("🗑️ Delete Product").setStyle(ButtonStyle.Danger),
+      // زر العودة للرئيسية — طلب صاحب اللوحة: كل قسم يرجّعك للوحة الرئيسية
+      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary)
     )],
     content: message || undefined,
   };
@@ -902,14 +904,97 @@ function ordersPanelPayload(interaction, statusText) {
 // على الضاغط حتى يكون ردّ الضاغط هو الكتابة الأخيرة (فلا تُمحى نصوص النجاح).
 // لو لم تُنشر اللوحة بعد فلا تفعل شيئاً.
 async function refreshOrdersPanel(guild) {
+  // ترتيب التعديلات كما كان: لوحة الطلبات أولًا (بعض الاختبارات تعتمد
+  // على أن أول تعديل هو تعديلها)، ثم لوحة التحليلات — ولو لم تُنشر لوحة
+  // الطلبات أصلاً تبقى التحليلات تتبع كل تغيير في الطلبات
   const op = config.ordersPanel;
-  if (!op?.messageId || !guild?.channels) return false;
-  // الكاش يمتلئ بعد الإقلاع، والجلب احتياطي لو غاب الروم من الكاش
-  const channel = guild.channels.cache?.get(op.channelId) || await guild.channels.fetch?.(op.channelId).catch(() => null);
+  let painted = false;
+  if (op?.messageId && guild?.channels) {
+    // الكاش يمتلئ بعد الإقلاع، والجلب احتياطي لو غاب الروم من الكاش
+    const channel = guild.channels.cache?.get(op.channelId) || await guild.channels.fetch?.(op.channelId).catch(() => null);
+    if (channel?.isTextBased() && channel.messages?.fetch) {
+      const msg = await channel.messages.fetch(op.messageId).catch(() => null);
+      if (msg?.edit) painted = !!(await msg.edit(ordersSection(undefined, { published: true })).catch(() => null));
+    }
+  }
+  await refreshAnalyticsBoard(guild).catch(() => {});
+  return painted;
+}
+
+// ─────────── قسم التحليلات: إحصائيات شراء كل منتج ───────────
+// طلب صاحب اللوحة: "يكون فيه إحصائيات الشراء كم مرات اشترى هذا المنتج"
+// + "أقدر أرسل اللوحة لروم". العدّاد = الطلبات المؤكدة والمسلّمة (شراء
+// حقيقي متحقق منه)، وتقييم المنتج من جدول ratings، والأسعار بالعملة
+// الصحيحة لكل منتج حتى لا تُجمع العملات في رقم واحد.
+function analyticsPayload(opts = {}) {
+  const published = !!opts.published;
+  const stats = db.prepare(`
+    SELECT p.id, p.name, p.price, p.currency,
+           COUNT(o.id) purchases,
+           COALESCE((SELECT AVG(r.stars) FROM ratings r WHERE r.product_id = p.id), 0) avg
+      FROM products p
+      LEFT JOIN orders o ON o.product_id = p.id AND o.status IN ('confirmed','delivered')
+     GROUP BY p.id
+     ORDER BY purchases DESC, p.name`).all();
+  const totals = db.prepare(`SELECT COUNT(*) purchases, COUNT(DISTINCT user_id) buyers
+      FROM orders WHERE status IN ('confirmed','delivered')`).get();
+  const pendingN = Number(db.prepare("SELECT COUNT(*) n FROM orders WHERE status='pending'").get().n);
+  const revenue = db.prepare(`SELECT p.currency currency, SUM(p.price) v FROM orders o JOIN products p ON p.id=o.product_id
+      WHERE o.status='delivered' GROUP BY p.currency`).all().map(r => formatPrice(r.v, r.currency));
+  const lines = stats.length
+    ? stats.map((p, i) => `${i + 1}. **${p.name}** — 🛍️ **${Number(p.purchases)}** purchase(s) · ⭐ ${(p.avg || 0).toFixed(1)}/5 · ${formatPrice(p.price, p.currency)}`).join("\n")
+    : "No products yet.";
+  const desc = [
+    lines,
+    "",
+    `🛒 **Purchases (confirmed + completed):** ${Number(totals.purchases)} · 👥 **Buyers:** ${Number(totals.buyers)} · ⏳ **Awaiting confirmation:** ${pendingN}`,
+    `💰 **Sales value (completed):** ${revenue.length ? revenue.join(" + ") : formatPrice(0)}`,
+    ...(published ? [
+      "",
+      "📌 **Live board** — purchase statistics for every product; repaints itself on every bot start and whenever an order or rating changes.",
+    ] : []),
+  ].join("\n");
+  return {
+    embeds: [embed("📊 Analytics · Purchases", desc)],
+    components: published ? [] : [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("panel:analytics:publish").setLabel("📤 Send to a room").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("panel:refresh").setLabel("Refresh Admin Dashboard").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
+    )],
+  };
+}
+
+// إعادة رسم لوحة التحليلات المنشورة — نفس منطق لوحة الطلبات:
+// config.analyticsPanel تُحفظ في config.json وتتزامن مع المستودع
+async function refreshAnalyticsBoard(guild) {
+  const ap = config.analyticsPanel;
+  if (!ap?.messageId || !guild?.channels) return false;
+  const channel = guild.channels.cache?.get(ap.channelId) || await guild.channels.fetch?.(ap.channelId).catch(() => null);
   if (!channel?.isTextBased() || !channel.messages?.fetch) return false;
-  const msg = await channel.messages.fetch(op.messageId).catch(() => null);
+  const msg = await channel.messages.fetch(ap.messageId).catch(() => null);
   if (!msg?.edit) return false;
-  return !!(await msg.edit(ordersSection(undefined, { published: true })).catch(() => null));
+  return !!(await msg.edit(analyticsPayload({ published: true })).catch(() => null));
+}
+
+// شاشة اختيار روم لإرسال لوحة التحليلات إليه
+function analyticsPublishView() {
+  return {
+    embeds: [embed("📊 Send the Analytics board to a room", [
+      "Pick the channel — the bot posts the purchase statistics there as a **permanent message**: how many times each product was bought, its rating, buyers and totals.",
+      "",
+      "Publishing in another channel **moves** the board (the old message is removed).",
+    ].join("\n"))],
+    components: [
+      new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder()
+        .setCustomId("d7_analytics_publish_ch")
+        .setPlaceholder("Pick the channel for the analytics board")
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        .setMinValues(1).setMaxValues(1)),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("panel:analytics").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
 }
 
 // شاشة اختيار الروم لنشر اللوحة (تظهر بعد ضغط زر النشر)
@@ -1881,7 +1966,10 @@ async function handleInteraction(interaction) {
           if (!rows) return interaction.reply({ content: "There are no products to delete.", ephemeral: true });
           return interaction.update({
             embeds: [embed("🗑️ Delete Product", "**Pick a product from the menu below.**\n⚠️ Deletion is permanent and cannot be undone.\nProducts with recorded orders cannot be deleted, to protect the sales history.")],
-            components: rows,
+            // زر رجوع: الشاشة كانت بلا مخرج إطلاقاً (لا Home ولا Back)
+            components: [...rows, new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId("panel:products").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+            )],
           });
         }
         if (section === "orders") {
@@ -2023,7 +2111,8 @@ async function handleInteraction(interaction) {
           return interaction.reply({ content: `✅ Ticket panel sent to <#${interaction.channel.id}>!`, ephemeral: true });
         }
         if (section === "content") {
-          const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:news").setLabel("Post News").setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId("panel:rules").setLabel("Post Rules").setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId("panel:update").setLabel("Post Update").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("panel:embed").setLabel("Custom Embed").setStyle(ButtonStyle.Secondary));
+          // خمسة أزرار حتى الحد — Home آخرها (طلب صاحب اللوحة: كل قسم يرجّع للرئيسية)
+          const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:news").setLabel("Post News").setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId("panel:rules").setLabel("Post Rules").setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId("panel:update").setLabel("Post Update").setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId("panel:embed").setLabel("Custom Embed").setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary));
           return interaction.update({ embeds: [embed("Control Center · Messages", "Choose the message type to create. Images are optional; use a direct image URL.")], components: [row] });
         }
         if (["news","rules","update","embed"].includes(section)) {
@@ -2032,9 +2121,11 @@ async function handleInteraction(interaction) {
           return interaction.showModal(modal);
         }
         if (section === "analytics") {
-          const productStats = db.prepare(`SELECT p.name,COUNT(o.id) count,COALESCE((SELECT AVG(r.stars) FROM ratings r WHERE r.product_id=p.id),0) avg FROM products p LEFT JOIN orders o ON o.product_id=p.id AND o.status IN ('confirmed','delivered') GROUP BY p.id ORDER BY count DESC`).all();
-          const desc = productStats.length ? productStats.map(p => `**${p.name}** — ${p.count} purchase(s) · ${(p.avg || 0).toFixed(1)}/5`).join("\n") : "No products yet.";
-          return interaction.update({ embeds: [embed("Control Center · Analytics", desc)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("panel:refresh").setLabel("Refresh Admin Dashboard").setStyle(ButtonStyle.Success))] });
+          const flag = parts[1];
+          // 📤 إرسال اللوحة لروم (شاشة اختيار القناة)، وإلا القسم نفسه:
+          // إحصائيات شراء كل منتج + زر العودة للرئيسية
+          if (flag === "publish") return interaction.update(analyticsPublishView());
+          return interaction.update(analyticsPayload());
         }
         if (section === "welcome") {
           const flag = parts[1];
@@ -2379,6 +2470,37 @@ async function handleInteraction(interaction) {
       saveConfig();
       // نعود لشاشة اللوحة بسطر تأكيد — الردّ المؤقت يترك شاشة اختيار الروم عالقة
       return interaction.editReply(ordersPanelPayload(interaction, `✅ Orders panel published in <#${channelId}> — purchase statistics, the order list and its three buttons (👁️ View Details · 🗑️ Delete · ✏️ Edit); it refreshes itself whenever an order changes.\nUse **📤 Publish panel** from /panel again to move it elsewhere.`)).catch(() => {});
+    }
+
+    // ─────────── نشر لوحة التحليلات (إحصائيات الشراء) في روم ───────────
+    // نفس منطق لوحة الطلبات: نشر في نفس الروم يعدّل الرسالة بدل التكديس،
+    // والنقل لروم آخر يحذف الرسالة القديمة، وconfig.analyticsPanel يحفظها
+    if (interaction.isChannelSelectMenu() && interaction.customId === "d7_analytics_publish_ch") {
+      if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      // اعتراف فوري: ما بعده جلب روم ورسائل وتعديل/نشر — شبكة كلها
+      await interaction.deferReply({ flags: 64 }).catch(() => {});
+      const channelId = interaction.values[0];
+      const channel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch?.(channelId).catch(() => null);
+      if (!channel?.isTextBased()) return interaction.editReply({ content: "That channel is not available to me." }).catch(() => {});
+      const payload = analyticsPayload({ published: true });
+      const prev = config.analyticsPanel;
+      if (prev?.messageId && prev.channelId === channelId) {
+        const old = await channel.messages?.fetch?.(prev.messageId).catch(() => null);
+        if (old?.edit) {
+          await old.edit(payload).catch(() => {});
+          return interaction.editReply({ content: `✅ Analytics board updated in <#${channelId}> — purchase statistics for every product.` }).catch(() => {});
+        }
+      }
+      const sent = await channel.send(payload).catch(() => null);
+      if (!sent) return interaction.editReply({ content: `❌ Could not post there — check that I can send messages in <#${channelId}>.` }).catch(() => {});
+      if (prev?.messageId && prev.channelId !== channelId) {
+        const oldChannel = interaction.guild.channels.cache.get(prev.channelId);
+        const old = await oldChannel?.messages?.fetch?.(prev.messageId).catch(() => null);
+        if (old?.delete) await old.delete().catch(() => {});
+      }
+      config.analyticsPanel = { channelId, messageId: sent.id };
+      saveConfig();
+      return interaction.editReply({ content: `✅ Analytics board posted in <#${channelId}> — how many times each product was purchased, its rating, buyers and totals. It repaints itself on every bot start and whenever an order or rating changes.` }).catch(() => {});
     }
 
     // ─────────── اختيار روم نشر المنتجات ───────────

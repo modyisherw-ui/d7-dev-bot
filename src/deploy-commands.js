@@ -3,6 +3,9 @@ const { REST, Routes, SlashCommandBuilder, ChannelType, PermissionFlagsBits } = 
 
 const commands = [
   new SlashCommandBuilder().setName("panel").setDescription("Open the unified S2A DEV control panel"),
+  // /panel2 — اللوحة نفسها لكن غير خاصة: تُنشر في الروم ويراه الجميع ويبقى
+  // ثابتة كأي رسالة، بدل /panel التي تظهر لصاحب الأمر فقط وتختفي معه
+  new SlashCommandBuilder().setName("panel2").setDescription("Post the public control panel here - visible to everyone"),
   new SlashCommandBuilder().setName("ticket-panel").setDescription("Post the S2A DEV ticket panel"),
   new SlashCommandBuilder().setName("products").setDescription("List products"),
   new SlashCommandBuilder().setName("product-add").setDescription("Add a store product (role → price → name)")
@@ -39,14 +42,12 @@ const commands = [
     .addStringOption(o=>o.setName("message").setDescription("Message body").setRequired(true))
     .addStringOption(o=>o.setName("image").setDescription("Image URL")),
   new SlashCommandBuilder().setName("stats").setDescription("Product sales and rating statistics"),
-  new SlashCommandBuilder().setName("close").setDescription("قفل الروم اللي كتبت فيه الأمر (يمنع الإرسال والثريدات)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
-  new SlashCommandBuilder().setName("open").setDescription("فتح الروم اللي كتبت فيه الأمر (يرجع الصلاحيات للوضع الطبيعي)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+  new SlashCommandBuilder().setName("close").setDescription("قفل الروم اللي كتبت فيه الأمر (يمنع الإرسال والثريدات)"),
+  new SlashCommandBuilder().setName("open").setDescription("فتح الروم اللي كتبت فيه الأمر (يرجع الصلاحيات للوضع الطبيعي)"),
   new SlashCommandBuilder().setName("welcome-set").setDescription("Set welcome text and image")
     .addStringOption(o=>o.setName("message").setDescription("Use {user} and {server}").setRequired(true))
     .addStringOption(o=>o.setName("image").setDescription("Image URL"))
-].map(c => c.toJSON());
+].map(c => c.setDefaultMemberPermissions(PermissionFlagsBits.Administrator).toJSON());
 
 async function main() {
   if (!process.env.DISCORD_TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {

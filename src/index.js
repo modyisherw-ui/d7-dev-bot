@@ -512,10 +512,10 @@ function welcomeDMPayload() {
 }
 
 // ─────────── رسالة الترحيب المثبّتة (D7 Dev) ───────────
-// نص ثابت طلبه صاحب المتجر ويُرسله بنفسه من اللوحة إلى روم الترحيب.
-// لا علاقة له بنص الترحيب التلقائي القابل للتعديل: هذا إعلان تثبته أنت
-// متى شئت، وذاك ما يصل للعضو لحظة انضمامه. فصلُهما يمنع أن يغيّر أحدٌ
-// نص الإعلان من على لوحة النص فتفقد الرسالة المنشورة معناها.
+// بذرتها الأصلية نص ثابت طلبه صاحب المتجر، والآن صارت قابلة للتعديل من
+// داخل اللوحة (زر ✏️ Edit intro في شاشة Send & Test): العنوان والنص والصورة —
+// وكل تعديل يعيد رسم الرسالة المنشورة إن كانت قد نُشرت من قبل.
+// ما يزال منفصلًا عن نص الترحيب التلقائي (رسالة الخاص لحظة الانضمام).
 const WELCOME_INTRO = {
   title: "✦ Welcome to D7 Dev",
   lines: [
@@ -526,14 +526,39 @@ const WELCOME_INTRO = {
   ],
 };
 
+// الحالة القابلة للتعديل في config.welcomeIntro — البذرة من WELCOME_INTRO
+// مرة واحدة فقط: مصفوفة محذوفة عن قصد لا تمتلئ من جديد (نفس منطق القوانين)
+function ensureIntro() {
+  const i = (config.welcomeIntro ||= {});
+  i.title ??= WELCOME_INTRO.title;
+  i.text ??= WELCOME_INTRO.lines.join("\n\n");
+  i.image ??= "";
+  i.channelId ??= "";
+  i.messageId ??= "";
+  return i;
+}
+
 // حمولة رسالة الترحيب المثبّتة — نفس ما يُعرض في اللوحة وما يُنشر في الروم
 function welcomeIntroPayload() {
+  const i = ensureIntro();
   const e = new EmbedBuilder()
     .setColor(EMBED_COLOR)
     .setThumbnail(EMBED_THUMB)
-    .setTitle(WELCOME_INTRO.title)
-    .setDescription(WELCOME_INTRO.lines.join("\n\n"));
+    .setTitle(String(i.title || WELCOME_INTRO.title).slice(0, 256))
+    .setDescription(String(i.text || WELCOME_INTRO.lines.join("\n\n")).slice(0, 4096) || " ");
+  if (/^https?:\/\//.test(i.image || "")) e.setImage(i.image);
   return { embeds: [e] };
+}
+
+// إعادة رسم الرسالة المثبّتة بعد تعديل النص أو الصورة — بعد الاعتراف بالضغط
+async function refreshIntroMessage(guild) {
+  const i = ensureIntro();
+  if (!i.messageId || !safeChannelId(i.channelId) || !guild?.channels) return false;
+  const channel = guild.channels.cache?.get(i.channelId) || await guild.channels.fetch?.(i.channelId).catch(() => null);
+  if (!channel?.isTextBased() || !channel.messages?.fetch) return false;
+  const msg = await channel.messages.fetch(i.messageId).catch(() => null);
+  if (!msg?.edit) return false;
+  return !!(await msg.edit(welcomeIntroPayload()).catch(() => null));
 }
 
 function welcomeChannelRow(id, currentId, placeholder) {
@@ -603,6 +628,7 @@ function welcomeTestView() {
       "• The on/off toggle does not affect this test.",
       "",
       "**📨 Post intro in the room** publishes the pinned welcome below (the D7 Dev copy) in the welcome channel — staff action, no member involved.",
+      "**✏️ Edit intro** edits that same pinned message: its title, its text and an optional image. If it was already posted, the posted message repaints itself.",
       "After sending you return here with the result.",
     ].join("\n"),
     components: [
@@ -614,7 +640,8 @@ function welcomeTestView() {
       new ActionRowBuilder().addComponents(
         // زر النشر اليدوي نزل إلى هنا من اللوحة الرئيسية: صفوف القسم بلغت
         // خمسة (حدّ ديسكورد) فلا يتّسع لزر سادس هناك، وهذه الشاشة ضِيق
-        // فتسع.
+        // فتسع. زر التعديل إلى جانبه: نفس الرسالة المثبّتة — نصها وصورتها.
+        new ButtonBuilder().setCustomId("panel:welcome:intro-edit").setLabel("✏️ Edit intro").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("panel:welcome:send").setLabel("📨 Post intro in the room").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId("panel:welcome").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
       ),
@@ -1537,10 +1564,23 @@ async function handleInteraction(interaction) {
     }
 
     if (interaction.isChatInputCommand()) {
+      // ─────────── كل الأوامر للمديرين فقط (طلب المالك الصريح) ───────────
+      // نافذة ديسكورد تخفي الأوامر عن غيرهم (default_member_permissions)،
+      // وهذا السطر يمنع التنفيذ نفسه حتى لو وصل الأمر بحيلة. قائمة المالك
+      // (adminUserIds) تمر أيضًا — شبكة أمان كي لا تُفقد صلاحيتك عن غير قصد.
+      const isAdmin = !!interaction.member?.permissions?.has?.(PermissionFlagsBits.Administrator)
+        || (config.permissions?.adminUserIds || []).includes(interaction.user.id);
+      if (!isAdmin) return interaction.reply({ content: "🔒 This bot's commands are limited to administrators.", ephemeral: true });
+
       const { commandName } = interaction;
       if (commandName === "panel") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
         return interaction.reply({ ...mainPanel(), ephemeral: true });
+      }
+      // /panel2 — اللوحة نفسها لكن غير خاصة: ردٌّ عادي يبقى في الروم ويراه
+      // الجميع ولا يختفي، وأزراره تعمل كأي لوحة منشورة (زر Home يعود إليها)
+      if (commandName === "panel2") {
+        return interaction.reply({ ...mainPanel() });
       }
       if (commandName === "ticket-panel") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
@@ -1951,15 +1991,34 @@ async function handleInteraction(interaction) {
             );
             return interaction.showModal(modal);
           }
+          if (flag === "intro-edit") {
+            const i = ensureIntro();
+            const modal = new ModalBuilder().setCustomId("panel_modal:intro_edit").setTitle("Edit the pinned welcome");
+            modal.addComponents(
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("title").setLabel("Title").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256).setValue(String(i.title || ""))),
+              // سطر فارغ بين الفقرات = فقرة جديدة في الإيمبد (نفس شكل الأصل)
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("text").setLabel("Message — blank line = new paragraph").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000).setValue(String(i.text || ""))),
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("image").setLabel("Image URL (optional — clears it if empty)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500).setValue(String(i.image || ""))),
+            );
+            return interaction.showModal(modal);
+          }
           if (flag === "send") {
             // رسالة ترحيب تُنشر بأمر الموظف لا بانضمام عضو — تذهب لروم الترحيب
             // نفسه الذي تُنشر فيه رسالة الانضمام احتياطاً، فيبقى المحتوى في مكان واحد
             const channel = channelFromConfig(interaction.guild, "welcome");
             if (!channel?.isTextBased()) return interaction.reply({ content: "⚠️ Set the welcome channel first — **Channels** section → 👋 Welcome channel.", ephemeral: true });
             const sent = await channel.send(welcomeIntroPayload()).catch(() => null);
+            // نحفظ معرّف الرسالة المنشورة: أي تعديل لاحق على النص أو الصورة
+            // يعيد رسمها في مكانها بدل نسخة جديدة فوق القديمة
+            if (sent?.id) {
+              const intro = ensureIntro();
+              intro.channelId = String(channel.id);
+              intro.messageId = String(sent.id);
+              saveConfig();
+            }
             return interaction.reply(sent
               ? { content: `✅ The welcome message was posted in <#${channel.id}>.`, ephemeral: true }
-              : { content: "⚠️ Could not post it there — check that I can send messages in that channel.", ephemeral: true });
+              : { content: "⚠️ Could not post it there - check that I can send messages in that channel.", ephemeral: true });
           }
           // زر التجربة → شاشة اختيار عضو، والنتيجة تظهر بعد الإرسال
           if (flag === "test") return interaction.update(welcomeTestView());
@@ -2654,6 +2713,23 @@ async function handleInteraction(interaction) {
         saveConfig();
         await interaction.reply({ content: url ? "✅ Welcome image saved." : "✅ Welcome image cleared.", ephemeral: true });
         return interaction.message?.edit(welcomeSection(url ? "✅ Image saved." : "✅ Image cleared.")).catch(() => {});
+      }
+      if (kind === "intro_edit") {
+        const intro = ensureIntro();
+        const url = interaction.fields.getTextInputValue("image").trim();
+        if (url && !/^https?:\/\//.test(url)) {
+          return interaction.reply({ content: "? The URL must start with `https://` or `http://`.", ephemeral: true });
+        }
+        intro.title = interaction.fields.getTextInputValue("title").trim().slice(0, 256) || intro.title;
+        intro.text = interaction.fields.getTextInputValue("text").trim();
+        intro.image = /^https?:\/\//.test(url) ? url : "";
+        saveConfig();
+        // الاعتراف بالضغط أولًا، ثم تعديل رسالة اللوحة، ثم إعادة رسم
+        // الرسالة المثبّتة في الروم إن كانت قد نُشرت من قبل
+        await interaction.reply({ content: "? The pinned welcome message was updated.", ephemeral: true }).catch(() => {});
+        await interaction.message?.edit(welcomeSection("? Intro updated.")).catch(() => {});
+        await refreshIntroMessage(interaction.guild).catch(() => {});
+        return;
       }
       const title = interaction.fields.getTextInputValue("title");
       const body = interaction.fields.getTextInputValue("body");

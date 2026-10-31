@@ -77,7 +77,7 @@
     "enabled": true,
     "sendDM": true,
     "title": "Welcome to S2A DEV!",
-    "message": "S2A DEV is a professional development studio specializing in high-quality FiveM scripts, modern UI designs, and innovative solutions built to enhance your server experience.",
+    "message": "S2A DEV is a professional development studio\nspecializing in high-quality FiveM scripts, modern UI designs,\nand innovative solutions built to enhance your server experience.",
     "storeRoleId": "",
     "storeChannelId": "1561448618492301472",
     "helpChannelId": "1561449062564102144",

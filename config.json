@@ -128,6 +128,58 @@
             "en": "Not knowing the rules does not exempt customers from responsibility for violating them."
           }
         ]
+      },
+      {
+        "id": "smvwh90ef",
+        "name": "Payments & Refunds | الدفع والاسترجاع",
+        "rules": [
+          {
+            "ar": "جميع عمليات الشراء نهائية بعد تسليم المنتج للعميل، ولا يتم استرجاع المبلغ بعد التسليم.",
+            "en": "All purchases are final after the product has been delivered. Refunds are not available after delivery."
+          },
+          {
+            "ar": "يجب التأكد من توفر المبلغ وصحة المنتج المطلوب قبل إتمام عملية الشراء.",
+            "en": "Customers must ensure they have sufficient funds and have selected the correct product before purchasing."
+          },
+          {
+            "ar": "لا يتحمل المتجر مسؤولية إرسال العميل مبلغاً خاطئاً أو استخدام وسيلة دفع غير معتمدة.",
+            "en": "The store is not responsible for incorrect payments or the use of unsupported payment methods."
+          },
+          {
+            "ar": "يجب الاحتفاظ بإثبات الدفع حتى يتم تأكيد الطلب واستلام المنتج.",
+            "en": "Customers must keep their payment receipts until the order is confirmed and delivered."
+          },
+          {
+            "ar": "في حال حدوث مشكلة في عملية الدفع، يجب التواصل مع الإدارة قبل فتح اعتراض أو المطالبة باسترجاع المبلغ.",
+            "en": "If a payment issue occurs, customers must contact the management before opening a payment dispute or requesting a refund."
+          }
+        ]
+      },
+      {
+        "id": "smvwhaol4",
+        "name": "Product Usage | استخدام المنتجات",
+        "rules": [
+          {
+            "ar": "جميع الملفات المشتراة مخصصة للاستخدام الشخصي أو داخل سيرفر العميل الخاص.",
+            "en": "All purchased files are intended for personal use or within the customer's own server."
+          },
+          {
+            "ar": "يُمنع إعادة بيع الملفات أو مشاركتها مع أشخاص آخرين دون الحصول على إذن من المتجر.",
+            "en": "Reselling or sharing files with others without store permission is prohibited."
+          },
+          {
+            "ar": "يُمنع نشر الملفات أو رفعها في مواقع التحميل أو المجتمعات العامة.",
+            "en": "Uploading files to public download websites or communities is strictly forbidden."
+          },
+          {
+            "ar": "يُمنع إزالة حقوق الملكية أو أسماء المطورين من المنتجات دون تصريح.",
+            "en": "Removing ownership credits or developer names without permission is prohibited."
+          },
+          {
+            "ar": "أي مخالفة لشروط الاستخدام قد تؤدي إلى إيقاف الدعم الفني للمنتج او سحبه.",
+            "en": "Violating these usage terms may result in the suspension of product support."
+          }
+        ]
       }
     ]
   }

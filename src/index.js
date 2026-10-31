@@ -402,6 +402,48 @@ function orderDeleteRows() {
   return orderPickRows("d7_order_del_sel", "Select the order to delete permanently...");
 }
 
+// ─────────── حذف طلب بخطوتَي تأكيد (طلب صاحب اللوحة) ───────────
+// "خلي لمن اسوي حذف لطلب من لوحه الطلبات يجيني رسالة تأكيد أنه تبي تحذف
+// الطلب متأكد، وإذا ضغطت تأكيد تجي رسالة ثانية: تبي تشيل الرتبة من
+// العميل ولا" — فالاختيار لا يمسح فورًا: سؤال أول هل أنت متأكد، ثم سؤال
+// ثانٍ عن رتبة المنتج، ثم التنفيذ.
+function orderDeleteConfirmView(order) {
+  return {
+    embeds: [embed("⚠️ Are you sure you want to delete this order?", [
+      `**#${order.id}** · ${order.name} · <@${order.user_id}> · ${formatPrice(order.price, order.currency)} · ${(ORDER_STATUS[order.status]?.emoji || "")} ${ORDER_STATUS[order.status]?.label || order.status}`,
+      "",
+      "The order **and its status message** will be removed. This cannot be undone.",
+      "",
+      "Press **Yes, delete it** to continue — or **Cancel** to go back.",
+    ].join("\n"))],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`panel:orders:delask:${order.id}`).setLabel("✅ Yes, delete it").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("panel:orders").setLabel("🔙 Cancel").setStyle(ButtonStyle.Secondary),
+    )],
+  };
+}
+
+// الشاشة الثانية: بعد "متأكد" يبقى سؤال الرتبة — نشيلها من العميل ولا لا
+function orderDeleteRoleView(order) {
+  const roleId = /^\d{17,20}$/.test(String(order.role_id || "")) ? String(order.role_id) : "";
+  return {
+    embeds: [embed("✂️ Also remove the customer's role?", [
+      `**#${order.id}** · ${order.name} · <@${order.user_id}>`,
+      "",
+      roleId
+        ? `Remove <@&${roleId}> from <@${order.user_id}> too? The order is deleted either way.`
+        : `**${order.name}** has no product role attached, so there is nothing to remove from <@${order.user_id}> — the order is deleted either way.`,
+      "",
+      "Pick an option — or **Cancel** to leave everything untouched.",
+    ].join("\n"))],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`panel:orders:delrole:${order.id}`).setLabel("✂️ Delete & remove the role").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`panel:orders:delkeep:${order.id}`).setLabel("🗑️ Delete, keep the role").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("panel:orders").setLabel("🔙 Cancel").setStyle(ButtonStyle.Secondary),
+    )],
+  };
+}
+
 // ردّ على رسالة اللوحة نفسها متى أمكن (حتى لا تبقى الشاشة القديمة عالقة)
 function respondWith(interaction, payload) {
   if (interaction.message && !interaction.replied && !interaction.deferred) {
@@ -827,7 +869,7 @@ function ordersSection(statusText, opts = {}) {
         "",
         "📌 **Live panel** — refreshes itself every time an order is created, confirmed, changed or deleted.",
         "**👁️ View Details** — pick an order and get its full card: buyer, admin, product, price, times, rating and review.",
-        "**🗑️ Delete Order** · **✏️ Edit Order** — manage an order straight from this message.",
+        "**🗑️ Delete Order** · **✏️ Edit Order** — manage an order straight from this message (deletion asks twice: sure? — then the customer's role).",
       ] : [
         "",
         "Confirm payment from the menu above; the customer is granted the product role automatically.",
@@ -1179,6 +1221,34 @@ async function removeOrderStatusMessage(guild, order) {
   if (msg) await msg.delete().catch(() => {});
 }
 
+// تنفيذ الحذف بعد الخطوتين من التأكيد: مسح الصف ثم الاعتراف بالضغط ثم
+// كل الشبكة خلفه (رسالة الحالة، رسم اللوحة المنشورة، سحب الرتبة إن اختير)
+async function deleteOrderConfirmed(interaction, id, removeRole) {
+  const order = orderForFeed(id);
+  if (!order) return interaction.reply({ content: `❌ Order #${id} no longer exists.`, ephemeral: true });
+  const roleId = /^\d{17,20}$/.test(String(order.role_id || "")) ? String(order.role_id) : "";
+  const doRole = !!removeRole && !!roleId;
+  // الصف أولًا (محلي، فوري) حتى تعكس الإحصاءات النتيجة في الرد نفسه
+  db.prepare("DELETE FROM orders WHERE id=?").run(id);
+  await respondWith(interaction, ordersPanelPayload(interaction,
+    `🗑️ Deleted order **#${id}** — ${doRole ? `removing <@&${roleId}> from <@${order.user_id}>…` : "the customer keeps their role."}`)).catch(() => {});
+  await refreshOrdersPanel(interaction.guild).catch(() => {});
+  await removeOrderStatusMessage(interaction.guild, order).catch(() => {});
+  if (!doRole) return;
+  // سحب الرتبة شبكة (جلب العضو ثم السحب) — جاءت بعد الاعتراف لا قبله،
+  // ونتيجتها تُبلَّغ في ردّ خاص حتى لا يبقى "ولا" بدون جواب
+  let failure = "";
+  const member = await interaction.guild?.members?.fetch?.(order.user_id).catch(() => null);
+  if (!member?.roles?.remove) failure = "I could not find that member.";
+  else await member.roles.remove(roleId, `Order #${id} deleted`).then(() => {}, err => { failure = err?.message || "unknown error"; });
+  await interaction.followUp?.({
+    content: failure
+      ? `⚠️ Order **#${id}** is deleted, but I could not remove <@&${roleId}> from <@${order.user_id}> — ${failure}`
+      : `✂️ Removed <@&${roleId}> from <@${order.user_id}> — order **#${id}** is fully deleted.`,
+    flags: 64,
+  }).catch(() => {});
+}
+
 // ─────────── أزرار تغيير حالة الطلب، داخل رسالة الحالة نفسها ───────────
 // الترتيب ترتيب مرحلة الدورة لا ترتيب كتابة الطلب: معلق ← قيد التنفيذ ←
 // تم التنفيذ، والإلغاء بجانبها. الزر المطابق للحالة الحالية معطّل: يبيّن
@@ -1524,7 +1594,14 @@ client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
 
 client.once(Events.ClientReady, async c => {
   console.log(`S2A DEV bot online as ${c.user.tag}`);
-  for (const guild of c.guilds.cache.values()) await refreshAdminDashboard(guild);
+  for (const guild of c.guilds.cache.values()) {
+    await refreshAdminDashboard(guild).catch(() => {});
+    // طلب صاحب اللوحة: "صفر الطلبات خليها 0" — كل إقلاع يعيد رسم لوحة
+    // الطلبات المنشورة من قاعدة البيانات الحقيقية، فلو حُذف شيء والبوت
+    // مطفأ لا تبقى أرقام قديمة على الرسالة المنشورة: العدّاد يعود صفرًا
+    // حقيقةً متى ما كانت الطلبات صفرًا
+    await refreshOrdersPanel(guild).catch(() => {});
+  }
 });
 
 client.on(Events.GuildMemberAdd, async member => {
@@ -1815,12 +1892,21 @@ async function handleInteraction(interaction) {
             // ⚠️ Delete All انتقل إلى هنا من صف أزرار اللوحة (خُمسة صفوفه
             // كانت ستة أزرار) — وهذا مكانه الطبيعي: شاشة الحذف.
             return interaction.update({
-              embeds: [embed("🗑️ Delete Order", "**Pick an order from the menu below.**\n⚠️ Deletion is permanent — the order **and its status message** are removed.")],
+              embeds: [embed("🗑️ Delete Order", "**Pick an order from the menu below.**\n⚠️ Deletion asks you twice: *are you sure?* — then whether to remove the customer's product role. Nothing is deleted until you answer both.")],
               components: [...delRows, new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId("panel:orders:delall").setLabel("⚠️ Delete All").setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId("panel:orders").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
               )],
             });
+          }
+          // خطوة التأكيد الثانية: سؤال الرتبة بعد "متأكد" من الحذف
+          if (flag === "delask") {
+            const order = orderForFeed(Number(parts[2]));
+            if (!order) return interaction.reply({ content: `❌ Order #${parts[2]} no longer exists.`, ephemeral: true });
+            return interaction.update(orderDeleteRoleView(order));
+          }
+          if (flag === "delrole" || flag === "delkeep") {
+            return deleteOrderConfirmed(interaction, Number(parts[2]), flag === "delrole");
           }
           if (flag === "publish") return interaction.update(ordersPublishView());
           if (flag === "view") {
@@ -2235,20 +2321,13 @@ async function handleInteraction(interaction) {
       return respondWith(interaction, { ...productsSection(), content: `🗑️ Deleted product **${product.name}** permanently.` });
     }
 
-    // ─────────── حذف طلب نهائياً ───────────
+    // ─────────── حذف طلب: الخطوة الأولى — "متأكد؟" ───────────
+    // الاختيار لا يمسح شيئاً بعد — هذه أولى شاشتَي التأكيد المطلوبتين
     if (interaction.isStringSelectMenu() && interaction.customId === "d7_order_del_sel") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-      const id = Number(interaction.values[0]);
-      const order = db.prepare("SELECT * FROM orders WHERE id=?").get(id);
-      if (!order) return interaction.reply({ content: `❌ Order #${id} no longer exists.`, ephemeral: true });
-      // الصف يُحذف أولاً (محلي، فوري) حتى تظهر الإحصاءات صحيحة في الرد،
-      // ثم الردّ، ثم رسالة الحالة في الروم — الشبكة بعد لا قبل الرد
-      db.prepare("DELETE FROM orders WHERE id=?").run(id);
-      // الردّ قبل أي شبكة: تعديل اللوحة المنشورة ينتظر وراء الاعتراف
-      await respondWith(interaction, ordersPanelPayload(interaction, `🗑️ Deleted order **#${id}** — its status message is being removed too.`)).catch(() => {});
-      await refreshOrdersPanel(interaction.guild).catch(() => {});
-      await removeOrderStatusMessage(interaction.guild, order).catch(() => {});
-      return;
+      const order = orderForFeed(Number(interaction.values[0]));
+      if (!order) return interaction.reply({ content: `❌ Order #${interaction.values[0]} no longer exists.`, ephemeral: true });
+      return respondWith(interaction, orderDeleteConfirmView(order));
     }
 
     // ─────────── اختيار طلب لعرض بطاقته الكاملة ───────────

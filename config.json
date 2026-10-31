@@ -28,7 +28,7 @@
   },
   "tickets": {
     "categoryId": "",
-    "logChannelId": "1561450187220586596",
+    "logChannelId": "1566142693309030400",
     "staffRoles": [
       "1561454000627523684"
     ],
@@ -57,7 +57,7 @@
         "label": "Problem",
         "description": "Report a bug or issue",
         "emoji": "🚧",
-        "enabled": true
+        "enabled": false
       },
       {
         "id": "report",

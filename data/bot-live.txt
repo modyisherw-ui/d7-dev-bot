@@ -358,3 +358,6 @@ S2A DEV bot online as S2A DEV#8569
 (node:2653) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
 (Use `node --trace-warnings ...` to show where the warning was created)
 S2A DEV bot online as S2A DEV#8569
+تقييم 771031431714570331 للمنتج 5: لا يوجد طلب يحمله — لم يُكتب في orders
+(node:2627) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
+(Use `node --trace-warnings ...` to show where the warning was created)

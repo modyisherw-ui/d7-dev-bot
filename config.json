@@ -180,6 +180,92 @@
             "en": "Violating these usage terms may result in the suspension of product support."
           }
         ]
+      },
+      {
+        "id": "smvwhbgpx",
+        "name": "Files & OneSync | الملفات والأون سنك",
+        "rules": [
+          {
+            "ar": "يجب قراءة وصف المنتج وجميع المتطلبات قبل إتمام عملية الشراء.",
+            "en": "Customers must read the product description and requirements before purchasing."
+          },
+          {
+            "ar": "بعض المنتجات قد تتطلب إصدارات محددة من FiveM أو OneSync أو موارد إضافية.",
+            "en": "Some products may require specific FiveM or OneSync versions or additional resources."
+          },
+          {
+            "ar": "يجب على العميل التأكد من توافق الملفات مع نظام السيرفر الخاص به.",
+            "en": "Customers are responsible for ensuring compatibility with their server environment."
+          },
+          {
+            "ar": "لا يتحمل المتجر مسؤولية المشاكل الناتجة عن تعديلات خارجية أو ملفات غير متوافقة أضافها العميل.",
+            "en": "The store is not responsible for issues caused by external modifications or incompatible third-party files."
+          },
+          {
+            "ar": "يجب عدم تعديل الملفات الأساسية للمنتج بطريقة تؤثر على عملها قبل التواصل مع الدعم الفني.",
+            "en": "Customers should avoid modifying core product files in ways that affect functionality before contacting support."
+          }
+        ]
+      },
+      {
+        "id": "smvwhc6v4",
+        "name": "Technical Support | الدعم الفني",
+        "rules": [
+          {
+            "ar": "الدعم الفني متاح للعملاء الذين قاموا بشراء منتجات S2A DEV فقط.",
+            "en": "Technical support is available only to customers who have purchased S2A DEV products."
+          },
+          {
+            "ar": "يجب فتح تذكرة دعم وشرح المشكلة بشكل واضح مع إرفاق صور أو فيديو عند الحاجة.",
+            "en": "Customers must open a support ticket and clearly explain the issue, providing screenshots or videos when necessary."
+          },
+          {
+            "ar": "يجب توفير المعلومات اللازمة مثل إصدار السيرفر ورسائل الأخطاء والملفات المتعلقة بالمشكلة.",
+            "en": "Required information may include server versions, error messages, and relevant files."
+          },
+          {
+            "ar": "يُمنع تكرار التذاكر أو إزعاج فريق الدعم بطلبات متكررة.",
+            "en": "Opening duplicate tickets or repeatedly disturbing the support team is prohibited."
+          },
+          {
+            "ar": "الدعم الفني لا يشمل إصلاح المشاكل الناتجة عن تعديلات العميل أو الموارد الخارجية غير التابعة للمتجر.",
+            "en": "Support does not cover issues caused by customer modifications or unrelated third-party resources."
+          },
+          {
+            "ar": "يتم التعامل مع طلبات الدعم حسب الأولوية ووقت توفر فريق العمل.",
+            "en": "Support requests are handled based on priority and staff availability."
+          }
+        ]
+      },
+      {
+        "id": "smvwhcx8s",
+        "name": "Custom Services | الخدمات البرمجية",
+        "rules": [
+          {
+            "ar": "يجب الاتفاق على جميع تفاصيل المشروع ومتطلباته قبل بدء العمل.",
+            "en": "All project details and requirements must be agreed upon before development begins."
+          },
+          {
+            "ar": "يتم تحديد السعر ومدة التنفيذ حسب حجم المشروع وصعوبته.",
+            "en": "Pricing and delivery times depend on the project's size and complexity."
+          },
+          {
+            "ar": "أي إضافات أو تعديلات جديدة خارج الاتفاق الأساسي قد تتطلب تكلفة إضافية.",
+            "en": "Additional features or changes outside the original agreement may require extra payment."
+          },
+          {
+            "ar": "يجب على العميل توفير جميع المعلومات والملفات المطلوبة لتنفيذ المشروع.",
+            "en": "Customers must provide all necessary information and files required for development."
+          },
+          {
+            "ar": "لا يتم تسليم المشروع النهائي قبل استكمال المبلغ المتفق عليه.",
+            "en": "The final project will not be delivered until the agreed payment has been completed."
+          },
+          {
+            "ar": "قد تختلف مدة التنفيذ حسب ضغط العمل وحجم التعديلات المطلوبة.",
+            "en": "Delivery times may vary depending on workload and requested modifications."
+          }
+        ]
       }
     ]
   }

@@ -100,12 +100,12 @@
   "rules": {
     "title": "Server Rules | قوانين السيرفر",
     "image": "https://i.postimg.cc/7Z0PJVkj/rules.png",
-    "introAr": "مرحباً بك في S2A DEV! يرجى قراءة قوانين المتجر بعناية. شراء أي منتج أو خدمة يعني موافقتك على جميع الشروط والأحكام المذكورة أدناه.",
-    "introEn": "Welcome to S2A DEV! Please take a moment to read our store rules carefully. By purchasing any product or service, you agree to follow all terms and conditions listed below.",
+    "introAr": "أهلاً بك في S2A DEV، يرجى قراءة القوانين التالية بعناية.\nباستخدامك لخدماتنا، فأنت توافق على جميع الشروط والأحكام.",
+    "introEn": "Welcome to S2A DEV! Please read our rules carefully By using our services, you agree to all terms and conditions Thank you for choosing us!",
     "noteEn": "All general server rules apply to this section",
     "noteAr": "جميع قوانين السيرفر العامة تنطبق على هذا القسم",
     "channelId": "1561445632701636760",
-    "messageId": "1565370938957238516",
+    "messageId": "1566093896809713805",
     "sections": [
       {
         "id": "smvwh7b5b",

@@ -106,6 +106,29 @@
     "noteAr": "جميع قوانين السيرفر العامة تنطبق على هذا القسم",
     "channelId": "1561445632701636760",
     "messageId": "1565370938957238516",
-    "sections": []
+    "sections": [
+      {
+        "id": "smvwh7b5b",
+        "name": "General Rules | القوانين العامة",
+        "rules": [
+          {
+            "ar": "يجب على جميع أعضاء وعملاء S2A DEV الالتزام بقوانين المتجر واحترامها.",
+            "en": "All S2A DEV members and customers must follow and respect the store rules."
+          },
+          {
+            "ar": "شراء أي منتج من المتجر يعني الموافقة على جميع القوانين والشروط المذكورة.",
+            "en": "Purchasing any product means you agree to all the rules and terms listed."
+          },
+          {
+            "ar": "يحق لإدارة S2A DEV تعديل القوانين أو تحديثها في أي وقت عند الحاجة.",
+            "en": "S2A DEV management reserves the right to modify or update these rules when necessary."
+          },
+          {
+            "ar": "عدم معرفة القوانين لا يعفي العميل من المسؤولية عن مخالفتها.",
+            "en": "Not knowing the rules does not exempt customers from responsibility for violating them."
+          }
+        ]
+      }
+    ]
   }
 }

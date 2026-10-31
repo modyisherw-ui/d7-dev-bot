@@ -348,10 +348,10 @@
     ]
   },
   "welcomeIntro": {
-    "title": "✦ Welcome to D7 Dev",
+    "title": "✦ Welcome to S2A Dev",
     "text": "Welcome to **S2A Dev** — where creativity meets precision.\n\nExplore premium FiveM resources, OneSync solutions, and custom-developed scripts built to elevate your server experience.\n\n**Innovate. Develop. Stand Out.**\n\nWe're glad to have you here. 💠",
-    "image": "",
-    "channelId": "",
-    "messageId": ""
+    "image": "https://i.postimg.cc/XvrZPFSc/welcome.png",
+    "channelId": "1561445389939253298",
+    "messageId": "1566124811414151199"
   }
 }

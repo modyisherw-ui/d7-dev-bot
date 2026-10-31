@@ -496,9 +496,19 @@ function welcomeDMText() {
   const body = [w.message || "", ...welcomeLines()].filter(x => x !== "" && x != null).join("\n");
   const parts = [`**${title}**`];
   if (body) parts.push(body);
-  if (/^https?:\/\//.test(w.imageUrl || "")) parts.push(w.imageUrl);
   if (w.footer) parts.push(`*${w.footer}*`);
   return parts.join("\n\n").slice(0, 2000);
+}
+
+// حمولة رسالة الترحيب للخاص: النص العادي نفسه + الصورة كإيمبد صافٍ فقط
+// (بلا عنوان ولا نص) — الرابط يظهر كصورة نظيفة بدل سطر مكشوف فوقها.
+function welcomeDMPayload() {
+  const w = ensureWelcome();
+  const payload = { content: welcomeDMText() };
+  if (/^https?:\/\//.test(w.imageUrl || "")) {
+    payload.embeds = [new EmbedBuilder().setColor(EMBED_COLOR).setImage(w.imageUrl)];
+  }
+  return payload;
 }
 
 // ─────────── رسالة الترحيب المثبّتة (D7 Dev) ───────────
@@ -1504,7 +1514,7 @@ client.on(Events.GuildMemberAdd, async member => {
   // طلب الصاحب: لا إيمبد في الخاص، ولا شيء إطلاقاً في روم الترحيب —
   // زار "الاحتياطي" السابق كان ينشر إيمبد الروم كلما انضم لاعب خاصه مقفول.
   if (config.welcome.sendDM !== false) {
-    await member.send({ content: welcomeDMText() }).catch(() => {});
+    await member.send(welcomeDMPayload()).catch(() => {});
     return;
   }
 
@@ -1937,7 +1947,7 @@ async function handleInteraction(interaction) {
             const w = ensureWelcome();
             const modal = new ModalBuilder().setCustomId("panel_modal:welcome_image").setTitle("Welcome image");
             modal.addComponents(
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("url").setLabel("Direct image URL shown under the message").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500).setValue(String(w.imageUrl || ""))),
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("url").setLabel("Direct image URL (shown, never as link text)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500).setValue(String(w.imageUrl || ""))),
             );
             return interaction.showModal(modal);
           }
@@ -2413,7 +2423,7 @@ async function handleInteraction(interaction) {
       if (config.welcome.sendDM !== false) {
         const user = await interaction.client.users.fetch(targetId).catch(() => null);
         const sent = user
-          ? await user.send({ content: welcomeDMText() }).then(() => true).catch(() => false)
+          ? await user.send(welcomeDMPayload()).then(() => true).catch(() => false)
           : false;
         return interaction.editReply(welcomeSection(sent
           ? `🧪 Test welcome sent to <@${targetId}> — plain text DM, exactly like a new member's.`

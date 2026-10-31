@@ -266,6 +266,84 @@
             "en": "Delivery times may vary depending on workload and requested modifications."
           }
         ]
+      },
+      {
+        "id": "smvwhdmol",
+        "name": "Updates & Maintenance | التحديثات والصيانة",
+        "rules": [
+          {
+            "ar": "تختلف سياسة التحديثات والصيانة من منتج إلى آخر حسب وصف المنتج.",
+            "en": "Update and maintenance policies vary depending on each product's description."
+          },
+          {
+            "ar": "لا يشترط أن تكون جميع التحديثات مجانية أو متاحة بشكل دائم.",
+            "en": "Not all updates are guaranteed to be free or permanently available."
+          },
+          {
+            "ar": "يحق للمتجر إيقاف أو تغيير دعم أي منتج مع توضيح ذلك للعملاء عند الحاجة.",
+            "en": "The store reserves the right to discontinue or change product support when necessary, with appropriate notice to customers."
+          },
+          {
+            "ar": "يجب متابعة روم التحديثات لمعرفة آخر الإضافات والإصلاحات.",
+            "en": "Customers should follow the updates channel to stay informed about new releases and fixes."
+          },
+          {
+            "ar": "التحديثات لا تعني بالضرورة إضافة ميزات جديدة، فقد تقتصر على إصلاح الأخطاء وتحسين الأداء.",
+            "en": "Updates do not always include new features and may only contain bug fixes or performance improvements."
+          }
+        ]
+      },
+      {
+        "id": "smvwhehpe",
+        "name": "Privacy & Security | الخصوصية والأمان",
+        "rules": [
+          {
+            "ar": "يُمنع مشاركة الملفات الخاصة أو بيانات الشراء مع أشخاص غير مصرح لهم.",
+            "en": "Sharing private files or purchase information with unauthorized individuals is prohibited."
+          },
+          {
+            "ar": "يجب على العميل المحافظة على بيانات حساباته ومفاتيح الترخيص الخاصة به.",
+            "en": "Customers are responsible for protecting their accounts and license keys."
+          },
+          {
+            "ar": "لا يطلب فريق S2A DEV كلمات المرور الشخصية أو بيانات تسجيل الدخول الخاصة بالعميل.",
+            "en": "S2A DEV staff will never request personal passwords or account login credentials."
+          },
+          {
+            "ar": "يُمنع انتحال شخصية الإدارة أو أحد أعضاء فريق العمل.",
+            "en": "Impersonating the management or any staff member is strictly prohibited."
+          },
+          {
+            "ar": "يجب الإبلاغ عن أي تسريب أو استخدام غير مصرح به لمنتجات المتجر.",
+            "en": "Any leaks or unauthorized use of store products should be reported immediately."
+          }
+        ]
+      },
+      {
+        "id": "smvwhf0lc",
+        "name": "Communication & Respect | التواصل والاحترام",
+        "rules": [
+          {
+            "ar": "يجب التعامل باحترام مع جميع أعضاء وفريق عمل المتجر.",
+            "en": "All customers must treat store members and staff with respect."
+          },
+          {
+            "ar": "يُمنع السب أو التهديد أو الإساءة أو إثارة المشاكل داخل المتجر.",
+            "en": "Insults, threats, harassment, and disruptive behavior are prohibited."
+          },
+          {
+            "ar": "يُمنع إزعاج الإدارة أو إرسال رسائل خاصة متكررة بغرض تسريع الطلبات.",
+            "en": "Repeatedly messaging staff privately to rush orders is not allowed."
+          },
+          {
+            "ar": "يجب استخدام التذاكر المخصصة لكل خدمة أو مشكلة.",
+            "en": "Customers must use the designated tickets for each service or issue."
+          },
+          {
+            "ar": "أي محاولة احتيال أو تضليل أو استغلال للمتجر قد تؤدي إلى الحظر.",
+            "en": "Fraud, deception, or attempts to exploit the store may result in a ban."
+          }
+        ]
       }
     ]
   }

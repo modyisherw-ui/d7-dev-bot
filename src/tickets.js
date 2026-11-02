@@ -66,12 +66,16 @@ function panelEmbed() {
   const p = t.panel || {};
   const enabled = types().filter(x => x.enabled !== false);
   const lines = enabled.map(tp => `> ${tp.emoji || ""} **${tp.label}** — ${tp.description}`).join("\n");
-  return new EmbedBuilder()
+  const e = new EmbedBuilder()
     .setColor(TICKET_COLOR)
     .setThumbnail(EMBED_THUMB)
     .setTitle(p.title || "🎫 Support Tickets")
     .setDescription(`${p.description || ""}\n\n${lines}`)
     .setFooter({ text: p.footer || config.brand?.footer || "S2A DEV" });
+  // صورة الإيمبد — تُضبط من زر Panel Text في لوحة التحكم (طلب صاحب اللوحة:
+  // "أبي أضيف صورة أو أعدل على الكلام للايمبد حق التكت")
+  if (/^https?:\/\//.test(String(p.image || ""))) e.setImage(p.image);
+  return e;
 }
 
 // ─────────── أدوات ───────────

@@ -107,6 +107,14 @@ CREATE TABLE IF NOT EXISTS purchase_checks (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   decided_at TEXT DEFAULT NULL
 );
+CREATE TABLE IF NOT EXISTS scripts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  price TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  preview_url TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // زر الحالة داخل رسالة الحالة يحتاج معرفة عنوان الرسالة لتعديلها في مكانها.

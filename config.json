@@ -35,7 +35,8 @@
     "panel": {
       "title": "🎫 Support Tickets",
       "description": "Welcome to our support system!\nSelect a ticket type from the menu below and a private channel will be created for you.",
-      "footer": "S2A DEV • Store System"
+      "footer": "S2A DEV . Store System",
+      "image": "https://i.postimg.cc/rpdMpfmH/ticket.png"
     },
     "ticketTypes": [
       {

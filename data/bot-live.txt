@@ -386,3 +386,19 @@ S2A DEV bot online as S2A BOT#8569
 S2A DEV bot online as S2A BOT#8569
 (node:2511) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
 (Use `node --trace-warnings ...` to show where the warning was created)
+S2A DEV bot online as S2A BOT#8569
+Interaction error: DiscordjsTypeError [ModalSubmitInteractionFieldNotFound]: Required field with custom id "download" not found.
+    at ModalSubmitFields.getField (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/discord.js/src/structures/ModalSubmitFields.js:61:23)
+    at ModalSubmitFields._getTypedComponent (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/discord.js/src/structures/ModalSubmitFields.js:81:28)
+    at ModalSubmitFields.getTextInputValue (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/discord.js/src/structures/ModalSubmitFields.js:102:17)
+    at handleInteraction (/home/runner/work/d7-dev-bot/d7-dev-bot/src/index.js:3616:46)
+    at Client.<anonymous> (/home/runner/work/d7-dev-bot/d7-dev-bot/src/index.js:3812:54)
+    at Client.emit (node:events:519:28)
+    at InteractionCreateAction.handle (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/discord.js/src/client/actions/InteractionCreate.js:103:12)
+    at module.exports [as INTERACTION_CREATE] (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/discord.js/src/client/websocket/handlers/INTERACTION_CREATE.js:4:36)
+    at WebSocketManager.handlePacket (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/discord.js/src/client/websocket/WebSocketManager.js:352:31)
+    at WebSocketManager.<anonymous> (/home/runner/work/d7-dev-bot/d7-dev-bot/node_modules/discord.js/src/client/websocket/WebSocketManager.js:236:12) {
+  code: 'ModalSubmitInteractionFieldNotFound'
+}
+(node:2224) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
+(Use `node --trace-warnings ...` to show where the warning was created)

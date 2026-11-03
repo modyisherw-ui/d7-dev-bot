@@ -38,6 +38,8 @@ const pendingProduct = new Map();
 // مسودات المنشورات بانتظار اختيار الروم (نظاما Free و Files)
 const pendingFree = new Map();
 const pendingFiles = new Map();
+// مسودة رسالة العرض (10 خانات صور مقسّمة على نوافذ متسلسلة)
+const pendingShowcase = new Map();
 
 // كاتيقوري الملفات: نظام Files لا يُرسل إيمبداً إلا داخل روماتها
 // (طلب صاحب اللوحة: "ما أقدر أرسل الإيمبد الا في category حق الملفات
@@ -1265,19 +1267,64 @@ function filesDeleteView(file) {
 
 // حمولة رسائل الملفات: رابط المعاينة أزرق أعلى الإيمبد ثم النص،
 // والصورة الاختيارية تحتها داخل الإيمبد — "احط رابط الصورة وهو يحطها"
-function filesSendPayload(file, kind, text, image) {
-  const isUpd = kind === "upd";
-  const isShow = kind === "show";
-  const title = isUpd ? `${file.name} — Update` : isShow ? `${file.name} — Showcase` : file.name;
+// حمولة رسالة الملف أو التحديث: ما عاد يُستخدم للعرض — العرض له باني
+// رسالة متعددة الصور (أدناه). رابط المعاينة أزرق أعلى الإيمبد، ورابط
+// التحميل أزرق فوقه في التحديث — "في رابط تحميل ويكون زر تحميل داخل
+// الايمبد" — والصورة تحت النص داخل الإيمبد
+function filesSendPayload(file, kind, text, image, download) {
+  const title = kind === "upd" ? `${file.name} — Update` : file.name;
   const parts = [];
-  // رابط المعاينة يظهر في رسالة الملف والتحديث فقط — طلب المالك:
-  // "في نظام الملفات لمن ارسل showcase في زر في الايمبد previewvideo احدفه"
-  if (!isShow && /^https?:\/\//.test(String(file.preview_url || ""))) parts.push(`[Preview video](${file.preview_url})`);
+  if (kind === "upd" && /^https?:\/\//.test(String(download || ""))) parts.push(`[Download](${download})`);
+  if (/^https?:\/\//.test(String(file.preview_url || ""))) parts.push(`[Preview video](${file.preview_url})`);
   const bodyText = String(text || "").trim() || file.details || "";
   if (bodyText) parts.push(bodyText);
   const e = embed(title, parts.join("\n\n"));
   if (/^https?:\/\//.test(String(image || ""))) e.setImage(image);
   return { embeds: [e], components: [] };
+}
+
+// خرائط نوافذ العرض 2/3: ديسكورد يمنح 5 حقول لكل نافذة، فالعشر خانات
+// توزّع بالتتابع: النافذة الأولى (نص + 4 صور) ثم 5 صور ثم الخانة الأخيرة
+function filesShowStep2Modal(fileId) {
+  const modal = new ModalBuilder().setCustomId(`panel_modal:files_show2:${fileId}`).setTitle("Send showcase (2/3)");
+  for (let n = 5; n <= 9; n++) {
+    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(`image${n}`).setLabel(`Image URL #${n} (optional)`).setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500)));
+  }
+  return modal;
+}
+
+function filesShowStep3Modal(fileId) {
+  const modal = new ModalBuilder().setCustomId(`panel_modal:files_show3:${fileId}`).setTitle("Send showcase (3/3)");
+  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("image10").setLabel("Image URL #10 (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500)));
+  return modal;
+}
+
+// يقرأ خانات صور مرقّمة من نافذة ويرجّع المقبول من الأنماط؛ أي رابط خارج
+// النمط يجعل النتيجة شاذة ليرفض المرسل كله قبل التخزين
+function collectShowcaseImages(interaction, from, to) {
+  const images = [];
+  let bad = false;
+  for (let n = from; n <= to; n++) {
+    const v = (interaction.fields.getTextInputValue(`image${n}`) || "").trim();
+    if (!v) continue;
+    if (!/^https?:\/\//.test(v)) bad = true;
+    else images.push(v);
+  }
+  return { images, bad };
+}
+
+// حمولة رسالة العرض: الإيمبد الرئيسي (نص أو تفاصيل الملف + أول صورة
+// تحته) ثم كل صورة إضافية في إيمبد صغير بعدها — عشر صور كحد أقصى (حد
+// ديسكورد 10 إيمبدات لكل رسالة) وبلا رابط معاينة (طلب المالك)
+function filesShowMessagePayload(file, text, images) {
+  const list = images.filter(u => /^https?:\/\//.test(u));
+  const e = embed(`${file.name} — Showcase`, String(text || "").trim() || file.details || "");
+  if (list.length) e.setImage(list[0]);
+  const embeds = [e];
+  for (const url of list.slice(1, 10)) {
+    embeds.push(new EmbedBuilder().setColor(EMBED_COLOR).setImage(url));
+  }
+  return { embeds, components: [] };
 }
 
 // التحقق من أن الروم داخل كاتيقوري الملفات قبل أي إرسال أو ربط
@@ -2250,6 +2297,16 @@ async function handleInteraction(interaction) {
         }
         return interaction.reply({ content: "لا يوجد preview", flags: 64 });
       }
+      // زر استكمال نوافذ العرض (احتياط إن رفض ديسكورد فتح نافذة بعد نافذة)
+      if (action === "d7_show_more") {
+        const draft = pendingShowcase.get(interaction.user.id);
+        const fileId = Number(parts[1]);
+        const stage = Number(parts[2]) === 3 ? 3 : 2;
+        if (!draft || Number(draft.fileId) !== fileId) {
+          return interaction.reply({ content: "❌ The showcase flow expired — press **Send Showcase** on the file again.", flags: 64 });
+        }
+        return interaction.showModal(stage === 3 ? filesShowStep3Modal(fileId) : filesShowStep2Modal(fileId));
+      }
       if (action === "panel") {
         if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
         const section = parts[0];
@@ -2441,8 +2498,10 @@ async function handleInteraction(interaction) {
               new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("body").setLabel("Text").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000)),
               new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("download").setLabel("Download link (required)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(300)),
               new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("preview").setLabel("Preview link (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(300)),
-              // طلب صاحب اللوحة: "خلي انه اقدر اضيف صورة تحت" — صورة الإيمبد
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("image").setLabel("Image URL (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500)),
+              // طلب صاحب اللوحة: "خلي انه اقدر اضيف صورة تحت" — صورة الإيمبد،
+              // وقيمة ثابتة افتراضية (طلب آخر: "خلي دا الرابط ثابت") ويبقى
+              // ممكن تغييرها أو تفريغها قبل النشر
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("image").setLabel("Image URL (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500).setValue("https://i.postimg.cc/NMRjDd19/free-scripts.png")),
             );
             return interaction.showModal(modal);
           }
@@ -2483,16 +2542,29 @@ async function handleInteraction(interaction) {
             if (!file) return interaction.reply({ content: "❌ That file no longer exists.", ephemeral: true });
             const fileAction = parts[3] || "";
             // أزرار الإرسال الثلاثة تفتح نافذة (النص + صورة اختيارية) ثم
-            // ترسل إلى روم الملف المعنيّة مباشرة
+            // ترسل إلى روم الملف المعنيّة مباشرة — نافذة العرض هي المرحلة
+            // الأولى من ثلاث (ديسكورد 5 حقول/نافذة): فيها النص + 4 صور
             if (fileAction === "msg" || fileAction === "upd" || fileAction === "show") {
               const modal = new ModalBuilder().setCustomId(`panel_modal:files_${fileAction}:${file.id}`)
-                .setTitle(fileAction === "upd" ? "Send update" : fileAction === "show" ? "Send showcase" : "Send message");
+                .setTitle(fileAction === "upd" ? "Send update" : fileAction === "show" ? "Send showcase (1/3)" : "Send message");
               const kindTitle = fileAction === "upd" ? "update text" : fileAction === "show" ? "showcase text" : "message text";
               modal.addComponents(
                 new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("text").setLabel(kindTitle).setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(3000)),
-                // "اقدر في كل الرسايل احط صورة تحت داخل الايمبد"
-                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("image").setLabel("Image URL (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500)),
               );
+              // "خلي انه في رابط تحميل ويكون زر تحميل داخل الايمبد" — يظهر
+              // أزرق أعلى إيمبد التحديث
+              if (fileAction === "upd") {
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("download").setLabel("Download link (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(300)));
+              }
+              // "اقدر في كل الرسايل احط صورة تحت داخل الايمبد" — والعرض
+              // يحمل عشر خانات: 4 هنا وخانة الخمس والإخيرة في النافذتين التاليتين
+              if (fileAction === "show") {
+                for (let n = 1; n <= 4; n++) {
+                  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(`image${n}`).setLabel(`Image URL #${n} (optional)`).setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500)));
+                }
+              } else {
+                modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("image").setLabel("Image URL (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500)));
+              }
               return interaction.showModal(modal);
             }
             if (fileAction === "del") return interaction.update(filesDeleteView(file));
@@ -3520,13 +3592,14 @@ async function handleInteraction(interaction) {
           return interaction.reply({ content: `✅ Created **${created.name}** — reopen the Files section to see its button.`, ephemeral: true });
         });
       }
-      // ─────────── أزرار إرسال الملف (رسالة/تحديث/عرض): نص + صورة ───────────
-      // كل رسالة تحمل رابط المعاينة أزرق أعلى الإيمبد والصورة تحته
-      if (kind === "files_msg" || kind === "files_upd" || kind === "files_show") {
+      // ─────────── أزرار إرسال الملف (رسالة/تحديث): نص + صورة/تحميل ───────────
+      // كل رسالة تحمل رابط المعاينة أزرق أعلى الإيمبد، والتحديث يضيف فوقه
+      // رابط تحميل أزرق، والصورة تحت النص داخل الإيمبد
+      if (kind === "files_msg" || kind === "files_upd") {
         const fileId = Number(interaction.customId.split(":")[2]);
         const file = db.prepare("SELECT * FROM files WHERE id=?").get(fileId);
         if (!file) return interaction.reply({ content: "❌ That file no longer exists.", ephemeral: true });
-        const roomId = kind === "files_upd" ? file.updates_channel_id : kind === "files_show" ? file.show_channel_id : file.main_channel_id;
+        const roomId = kind === "files_upd" ? file.updates_channel_id : file.main_channel_id;
         // حماية ثانية: الروومات كانت داخل الكاتيقوري عند الإنشاء
         const channel = filesRoomInCategory(interaction.guild, roomId);
         if (!channel) {
@@ -3536,13 +3609,96 @@ async function handleInteraction(interaction) {
         if (image && !/^https?:\/\//.test(image)) {
           return interaction.reply({ content: "❌ The image URL must start with http:// or https://.", ephemeral: true });
         }
-        const payload = filesSendPayload(file, kind.slice(6), (interaction.fields.getTextInputValue("text") || "").trim(), image);
+        const download = (interaction.fields.getTextInputValue("download") || "").trim();
+        if (download && !/^https?:\/\//.test(download)) {
+          return interaction.reply({ content: "❌ The download link must start with http:// or https://.", ephemeral: true });
+        }
+        const payload = filesSendPayload(file, kind.slice(6), (interaction.fields.getTextInputValue("text") || "").trim(), image, download);
         const sent = await channel.send(payload).catch(() => null);
         if (!sent) {
           return interaction.reply({ content: `❌ Could not post in <#${roomId}> — check that I can send messages there.`, ephemeral: true });
         }
-        const doneTxt = kind === "files_upd" ? "Update" : kind === "files_show" ? "Showcase" : "Message";
-        return interaction.reply({ content: `✅ ${doneTxt} posted in <#${roomId}> — the preview link is blue inside the embed${image ? " with your image under it" : ""}.`, ephemeral: true });
+        const doneTxt = kind === "files_upd" ? "Update" : "Message";
+        return interaction.reply({ content: `✅ ${doneTxt} posted in <#${roomId}> — the preview link is blue inside the embed${download ? " with your Download link on top" : ""}${image ? " with your image under it" : ""}.`, ephemeral: true });
+      }
+      // ─────────── رسالة العرض: عشر خانات صور عبر نوافذ متسلسلة ───────────
+      // المرحلة الأولى: النص + 4 صور، ثم تُفتح نافذة الصور 5–9 تلقائياً
+      // (وبإمكانها فشل فتُعرض زر استكمال) — المسودة تبقى مع المستخدم حتى
+      // الخانة العاشرة ثم الإرسال إلى روم العرض
+      if (kind === "files_show") {
+        const fileId = Number(interaction.customId.split(":")[2]);
+        const file = db.prepare("SELECT * FROM files WHERE id=?").get(fileId);
+        if (!file) return interaction.reply({ content: "❌ That file no longer exists.", ephemeral: true });
+        const { images, bad } = collectShowcaseImages(interaction, 1, 4);
+        if (bad) return interaction.reply({ content: "❌ Every image URL must start with http:// or https://.", ephemeral: true });
+        pendingShowcase.set(interaction.user.id, {
+          fileId,
+          text: (interaction.fields.getTextInputValue("text") || "").trim(),
+          images,
+        });
+        try {
+          await interaction.showModal(filesShowStep2Modal(fileId));
+          return;
+        } catch (e) {
+          await interaction.reply({
+            content: "📁 **Continue:** open the next window to add images #5–#9.",
+            components: [new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId(`d7_show_more:${fileId}:2`).setLabel("➡️ Continue").setStyle(ButtonStyle.Primary),
+            )],
+            ephemeral: true,
+          }).catch(() => {});
+          return;
+        }
+      }
+      // المرحلة الثانية: صور 5–9، ثم نافذة الخانة العاشرة
+      if (kind === "files_show2") {
+        const fileId = Number(interaction.customId.split(":")[2]);
+        const draft = pendingShowcase.get(interaction.user.id);
+        if (!draft || Number(draft.fileId) !== fileId) {
+          return interaction.reply({ content: "❌ The showcase flow expired — press **Send Showcase** on the file again.", ephemeral: true });
+        }
+        const { images, bad } = collectShowcaseImages(interaction, 5, 9);
+        if (bad) return interaction.reply({ content: "❌ Every image URL must start with http:// or https://.", ephemeral: true });
+        draft.images.push(...images);
+        pendingShowcase.set(interaction.user.id, draft);
+        try {
+          await interaction.showModal(filesShowStep3Modal(fileId));
+          return;
+        } catch (e) {
+          await interaction.reply({
+            content: "📁 **Continue:** open the last window for image #10.",
+            components: [new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId(`d7_show_more:${fileId}:3`).setLabel("➡️ Continue").setStyle(ButtonStyle.Primary),
+            )],
+            ephemeral: true,
+          }).catch(() => {});
+          return;
+        }
+      }
+      // المرحلة الأخيرة: الخانة 10 ثم الإرسال — كل صورة إضافية تصل في
+      // إيمبد سطر بعد الرئيسي، وبلا رابط معاينة (طلب المالك)
+      if (kind === "files_show3") {
+        const fileId = Number(interaction.customId.split(":")[2]);
+        const draft = pendingShowcase.get(interaction.user.id);
+        if (!draft || Number(draft.fileId) !== fileId) {
+          return interaction.reply({ content: "❌ The showcase flow expired — press **Send Showcase** on the file again.", ephemeral: true });
+        }
+        const { images, bad } = collectShowcaseImages(interaction, 10, 10);
+        if (bad) return interaction.reply({ content: "❌ Every image URL must start with http:// or https://.", ephemeral: true });
+        draft.images.push(...images);
+        pendingShowcase.delete(interaction.user.id);
+        const file = db.prepare("SELECT * FROM files WHERE id=?").get(fileId);
+        if (!file) return interaction.reply({ content: "❌ That file no longer exists.", ephemeral: true });
+        const channel = filesRoomInCategory(interaction.guild, file.show_channel_id);
+        if (!channel) {
+          return interaction.reply({ content: `❌ That file's showcase room is not inside the files category (<#${FILES_CATEGORY_ID}>) anymore — recreate the file with a valid room.`, ephemeral: true });
+        }
+        const payload = filesShowMessagePayload(file, draft.text, draft.images);
+        const sent = await channel.send(payload).catch(() => null);
+        if (!sent) {
+          return interaction.reply({ content: `❌ Could not post in <#${file.show_channel_id}> — check that I can send messages there.`, ephemeral: true });
+        }
+        return interaction.reply({ content: `✅ Showcase posted in <#${file.show_channel_id}> — up to ${draft.images.length} image(s) shown, no preview link.`, ephemeral: true });
       }
       if (kind === "add-price") {
         const price = Number(interaction.fields.getTextInputValue("price").replace(/,/g, ""));

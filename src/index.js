@@ -105,7 +105,7 @@ function mainPanel() {
     "📜 **Rules** — the rule book: sections, banner and the published message",
     "🎁 **Free** — publish a free script/map with a download link and preview",
     "📦 **Scripts** — the scripts board: name, price, status, preview",
-    "📁 **Files** — embeds that only go inside the files category",
+    "📁 **Files** — file entities with main/showcase/updates rooms, all inside the files category",
   ].join("\n"));
   return { embeds: [e], components: [row1, row2, row3, row4] };
 }
@@ -1050,21 +1050,38 @@ function freePayload(draft) {
 }
 
 // ─────────── نظام Scripts: لوحة كاملة لكل السكربتات ───────────
-// "لوحه إيمبد انشرها فيها لوحه كاملة لكل السكربتات وأنا من لوحة التحكم
-// أحط السكربت واسمه وسعره وهل هو فعال" — القائمة في التحكم نفسها هي
-// مصدر اللوحة المنشورة
+// "لوحه إيمبد انشرها فيها لوحه كاملة لكل السكربتات" — السكربتات تُضاف
+// من المنتجات الموجودة فقط، وحالتان: Active أو قيد الإنشاء، ومع كل
+// سكربت سعره وحالة إدارته وعدد مرات شرائه من الطلبات الفعلية
+// الحالتان فقط: Active أو In Development (قيد الإنشاء) — النص العربي
+// "قيد" يُقبل أيضاً كي لا يحير المستخدم
+function scriptStatusFromText(text) {
+  const t = String(text || "").trim().toLowerCase();
+  return /^(a|ac|act|acti|activ|active|y|yes|1|فعال|نشط)/.test(t) ? "active" : "wip";
+}
+
+function scriptSalesCount(productId) {
+  if (!Number(productId)) return 0;
+  return Number(db.prepare("SELECT COUNT(*) c FROM orders WHERE product_id=? AND status IN ('confirmed','delivered')").get(Number(productId))?.c || 0);
+}
+
+function scriptStatusLine(s) {
+  const status = s.status === "wip" || (!s.status && !Number(s.active)) ? "🚧 In Development" : "✅ Active";
+  return `Price: ${s.price || "Free"} · ${status} · 🧾 ${scriptSalesCount(s.product_id)} sale(s)`;
+}
+
 function scriptsSection(message) {
   const list = db.prepare("SELECT * FROM scripts ORDER BY id DESC LIMIT 30").all();
   const lines = list.length
-    ? list.map((s, i) => `${i + 1}. **${s.name}** — 💰 ${s.price || "Free"} — ${Number(s.active) ? "✅ Active" : "❌ Inactive"}${/^https?:\/\//.test(String(s.preview_url || "")) ? " · 👁️" : ""}`).join("\n")
-    : "No scripts yet. Press **Add Script** below.";
+    ? list.map((s, i) => `${i + 1}. **${s.name}**\n> ${scriptStatusLine(s)}${/^https?:\/\//.test(String(s.preview_url || "")) ? " · 👁️" : ""}`).join("\n")
+    : "No scripts yet. Press **Add Script** below — scripts are picked from your existing products.";
   return {
     embeds: [embed("Control Center · Scripts", [
       `**${list.length} script(s)** — this list is exactly what the published board shows.`,
       "",
       lines,
       "",
-      "**Publish** puts the full board in a room: every script with a Preview button — no link means pressing it answers «لا يوجد preview».",
+      "**Add Script** picks one of your **Products** and puts it on the board as Active or In Development — Publish puts the full board in a room with a Preview button per script.",
     ].join("\n"))],
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("panel:scripts:add").setLabel("➕ Add Script").setStyle(ButtonStyle.Success),
@@ -1077,16 +1094,16 @@ function scriptsSection(message) {
   };
 }
 
-// حمولة اللوحة المنشورة: كل السكربتات + أزرار Preview لكل واحد
-// (رابط أزرق إن وُجد رابط، وإلا زر عادي «لا يوجد preview») — 5 صفوف × 5
-// أزرار كحد أقصى، وما تجاوزها يبقى في القائمة نصاً
+// حمولة اللوحة المنشورة: اسم كل سكربت وتحته السعر والحالة وعدد عمليات
+// الشراء — بلا إيموجي الفلوس، والعنوان بلا رمز لأن اللوقو الصغير يأتي
+// من صورة الإيمبد اليمينية في كل الرسائل
 function scriptsPayload(opts = {}) {
   const published = !!opts.published;
   const list = db.prepare("SELECT * FROM scripts ORDER BY id ASC").all();
   const lines = list.length
-    ? list.map((s, i) => `${i + 1}. **${s.name}** — 💰 ${s.price || "Free"} — ${Number(s.active) ? "✅ Active" : "❌ Inactive"}`).join("\n")
+    ? list.map((s, i) => `${i + 1}. **${s.name}**\n> ${scriptStatusLine(s)}`).join("\n")
     : "No scripts yet.";
-  const e = embed("📦 S2A DEV Scripts", [
+  const e = embed("S2A DEV Scripts", [
     `**${list.length} script(s)** — tap Preview for a script's demo.`,
     "",
     lines,
@@ -1134,8 +1151,29 @@ function scriptsPickRows(customId, placeholder) {
     .setCustomId(customId).setPlaceholder(placeholder).setMinValues(1).setMaxValues(1)
     .addOptions(list.map(s => new StringSelectMenuOptionBuilder()
       .setLabel(s.name.slice(0, 100))
-      .setDescription(`${s.price || "Free"} • ${Number(s.active) ? "active" : "inactive"}`.slice(0, 100))
+      .setDescription(`${s.price || "Free"} • ${s.status === "wip" ? "in development" : "active"}`.slice(0, 100))
       .setValue(String(s.id)))))];
+}
+
+// شاشة اختيار المنتج الذي تصبح منه إضافة السكربت — السكربت يُضاف من
+// منتجات اللوحة فقط (طلب صاحب اللوحة: "اقدر اضيف منتجات فقط واخليها
+// active ولا قيد الانشاء")
+function scriptsAddProductView() {
+  const products = db.prepare("SELECT * FROM products ORDER BY id ASC LIMIT 25").all();
+  const rows = [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+    .setCustomId("d7_scripts_prod_sel").setPlaceholder("Pick the product this script comes from").setMinValues(1).setMaxValues(1)
+    .addOptions(products.map(p => new StringSelectMenuOptionBuilder()
+      .setLabel(String(p.name).slice(0, 100))
+      .setDescription(`Price: ${formatPrice(p.price)} — will be copied to the script`.slice(0, 100))
+      .setValue(String(p.id)))))];
+  return {
+    embeds: [embed("➕ Add Script — pick the product", [
+      "Scripts come from your **Products** — pick one and the script takes its name and price automatically; then you choose **Active** or **In Development** and a preview link.",
+    ].join("\n"))],
+    components: [...rows, new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("panel:scripts").setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+    )],
+  };
 }
 
 // إعادة رسم لوحة السكربتات المنشورة — نفس منطق لوحة الطلبات والتحليلات
@@ -1149,47 +1187,102 @@ async function refreshScriptsBoard(guild) {
   return !!(await msg.edit(scriptsPayload({ published: true })).catch(() => null));
 }
 
-// ─────────── نظام Files: إيمبد لا يُرسل إلا داخل كاتيقوري الملفات ───────────
+// ─────────── نظام Files: كيانات ملفات لها ثلاث رومات ───────────
+// زر "Create Files" يطلب: الروم الرئيسي، روم عرض الملفات/الصور، وروم
+// التحديثات — كلها داخل كاتيقوري الملفات (<#FILES_CATEGORY_ID>) — ثم
+// اسم الملفات وتفاصيله. لكل ملف زر باسمه تحته ثلاث أزرار إرسال
+// (رسالة/تحديث/عرض) وكل رسالة تحمل رابط المعاينة أزرق داخل الإيمبد
+// وصورة اختيارية — طلب صاحب اللوحة 2026-11-03
 function filesSection(message) {
-  const imgs = config.files?.imagesChannelId;
-  const imgsSel = new ChannelSelectMenuBuilder()
-    .setCustomId("d7_files_images_ch")
-    .setPlaceholder(safeChannelId(imgs) ? `🖼️ Images room — current: <#${imgs}>` : "🖼️ Pick the images room")
-    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-    .setMinValues(1).setMaxValues(1);
-  if (safeChannelId(imgs)) imgsSel.setDefaultChannels([imgs]);
+  const list = db.prepare("SELECT * FROM files ORDER BY id DESC LIMIT 20").all();
+  const lines = list.length
+    ? list.map((fl, i) => `${i + 1}. **${fl.name}**\n> Main: <#${fl.main_channel_id}> · Showcase: <#${fl.show_channel_id}> · Updates: <#${fl.updates_channel_id}>`).join("\n")
+    : "No files yet. Press **Create Files** below.";
+  // أزرار أسماء الملفات: 20 زر كحد أقصى (4 صفوف) + صف الإجراءات = 5
+  const fileBtns = list.map(fl => new ButtonBuilder()
+    .setCustomId(`panel:files:f:${fl.id}`).setLabel(String(fl.name).slice(0, 80)).setStyle(ButtonStyle.Primary));
+  const fileRows = [];
+  for (let i = 0; i < fileBtns.length; i += 5) fileRows.push(new ActionRowBuilder().addComponents(fileBtns.slice(i, i + 5)));
   return {
     embeds: [embed("Control Center · Files", [
-      `Publish an embed **only inside the files category** (<#${FILES_CATEGORY_ID}>).`,
+      `**${list.length}** file(s) inside the files category (<#${FILES_CATEGORY_ID}>).`,
       "",
-      "The post carries your **title** and **text**, a blue **Preview video** link button, and under it the **images room** link — the room you pick below.",
+      lines,
       "",
-      `**Images room:** ${safeChannelId(imgs) ? `<#${imgs}>` : "Not set — pick one below."}`,
-      "",
-      "Press **New Embed** to write one — you'll then choose the room from the category's channels only.",
+      "**Create Files** asks for each file's rooms — the **main room**, the **showcase/images room** and the **updates room** — then the file name and details. Every file gets its own **button** with Send Message / Send Update / Send Showcase inside.",
     ].join("\n"))],
     components: [
+      ...fileRows.slice(0, 4),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("panel:files:new").setLabel("✍️ New Embed").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("panel:files:new").setLabel("📁 Create Files").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
       ),
-      new ActionRowBuilder().addComponents(imgsSel),
     ],
     content: message || undefined,
   };
 }
 
-// حمولة إيمبد الملفات: زر الفيديو الأزرق ثم تحته زر رابط روم الصور
-function filesPayload(draft, guild) {
-  const rows = [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setLabel("🎬 Preview video").setStyle(ButtonStyle.Link).setURL(draft.video))];
-  const imgs = config.files?.imagesChannelId;
-  if (safeChannelId(imgs)) {
-    rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setLabel("🖼️ Images room").setStyle(ButtonStyle.Link)
-        .setURL(`https://discord.com/channels/${guild.id}/${imgs}`)));
-  }
-  return { embeds: [embed(draft.title, draft.body)], components: rows };
+// صفحة ملف واحد: تدقيقها وأزرار الإرسال الثلاثة
+function filesFileView(file, message) {
+  const hasVideo = /^https?:\/\//.test(String(file.preview_url || ""));
+  return {
+    embeds: [embed(`Files · ${file.name}`, [
+      ...(hasVideo ? [`[Preview video](${file.preview_url})`, ""] : []),
+      file.details || "No details yet.",
+      "",
+      `**Main:** <#${file.main_channel_id}> · **Showcase:** <#${file.show_channel_id}> · **Updates:** <#${file.updates_channel_id}>`,
+    ].join("\n"))],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`panel:files:f:${file.id}:msg`).setLabel("✉️ Send Message").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`panel:files:f:${file.id}:upd`).setLabel("🔄 Send Update").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`panel:files:f:${file.id}:show`).setLabel("🖼️ Send Showcase").setStyle(ButtonStyle.Secondary),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("panel:files").setLabel("📁 Files").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`panel:files:f:${file.id}:del`).setLabel("🗑️ Delete").setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId("panel:home").setLabel("🔙 Home").setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+    content: message || undefined,
+  };
+}
+
+// خطوة تأكيد الحذف
+function filesDeleteView(file) {
+  return {
+    embeds: [embed(`🗑️ Delete ${file.name}`, [
+      "**Delete this file permanently?**",
+      "",
+      "Its rooms stay as they are — only the file entry and its button disappear.",
+    ].join("\n"))],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`panel:files:f:${file.id}:del2`).setLabel("🗑️ Confirm delete").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`panel:files:f:${file.id}`).setLabel("🔙 Back").setStyle(ButtonStyle.Secondary),
+    )],
+  };
+}
+
+// حمولة رسائل الملفات: رابط المعاينة أزرق أعلى الإيمبد ثم النص،
+// والصورة الاختيارية تحتها داخل الإيمبد — "احط رابط الصورة وهو يحطها"
+function filesSendPayload(file, kind, text, image) {
+  const isUpd = kind === "upd";
+  const isShow = kind === "show";
+  const title = isUpd ? `${file.name} — Update` : isShow ? `${file.name} — Showcase` : file.name;
+  const parts = [];
+  if (/^https?:\/\//.test(String(file.preview_url || ""))) parts.push(`[Preview video](${file.preview_url})`);
+  const bodyText = String(text || "").trim() || file.details || "";
+  if (bodyText) parts.push(bodyText);
+  const e = embed(title, parts.join("\n\n"));
+  if (/^https?:\/\//.test(String(image || ""))) e.setImage(image);
+  return { embeds: [e], components: [] };
+}
+
+// التحقق من أن الروم داخل كاتيقوري الملفات قبل أي إرسال أو ربط
+function filesRoomInCategory(guild, channelId) {
+  const channel = guild?.channels?.cache?.get(channelId);
+  if (!channel?.isTextBased?.()) return null;
+  return channel.parentId === FILES_CATEGORY_ID ? channel : null;
 }
 
 // شاشة اختيار الروم لنشر اللوحة (تظهر بعد ضغط زر النشر)
@@ -2355,15 +2448,14 @@ async function handleInteraction(interaction) {
         }
         if (section === "scripts") {
           const flag = parts[1];
+          // السكربت يُضاف من منتج موجود (زر Add → قائمة المنتجات → نافذة
+          // بقيم المنتج ← الحالة Active أو قيد الإنشاء + رابط المعاينة)
           if (flag === "add") {
-            const modal = new ModalBuilder().setCustomId("d7_scripts_add").setTitle("Add a script");
-            modal.addComponents(
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("name").setLabel("Script name").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("price").setLabel("Price (e.g. 25 SAR)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(40)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("active").setLabel("Active? (yes/no)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(5).setPlaceholder("yes")),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("preview").setLabel("Preview link (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(300)),
-            );
-            return interaction.showModal(modal);
+            const products = db.prepare("SELECT COUNT(*) c FROM products").get().c;
+            if (!products) {
+              return interaction.reply({ content: "❌ You have no products yet — create one in the **Products** section first, then add scripts from it.", ephemeral: true });
+            }
+            return interaction.update(scriptsAddProductView());
           }
           if (flag === "edit" || flag === "del") {
             const isEdit = flag === "edit";
@@ -2383,15 +2475,42 @@ async function handleInteraction(interaction) {
           return interaction.update(scriptsSection());
         }
         if (section === "files") {
-          const flag = parts[1];
-          if (flag === "new") {
-            const modal = new ModalBuilder().setCustomId("panel_modal:files").setTitle("New files embed");
-            modal.addComponents(
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("title").setLabel("Title").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("body").setLabel("Text").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000)),
-              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("video").setLabel("Video link (required)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(300)),
-            );
-            return interaction.showModal(modal);
+          // صفحة ملف واحد: panel:files:f:<id> و panel:files:f:<id>:msg|upd|show|del|del2
+          if (parts[1] === "f") {
+            const file = db.prepare("SELECT * FROM files WHERE id=?").get(Number(parts[2]));
+            if (!file) return interaction.reply({ content: "❌ That file no longer exists.", ephemeral: true });
+            const fileAction = parts[3] || "";
+            // أزرار الإرسال الثلاثة تفتح نافذة (النص + صورة اختيارية) ثم
+            // ترسل إلى روم الملف المعنيّة مباشرة
+            if (fileAction === "msg" || fileAction === "upd" || fileAction === "show") {
+              const modal = new ModalBuilder().setCustomId(`panel_modal:files_${fileAction}:${file.id}`)
+                .setTitle(fileAction === "upd" ? "Send update" : fileAction === "show" ? "Send showcase" : "Send message");
+              const kindTitle = fileAction === "upd" ? "update text" : fileAction === "show" ? "showcase text" : "message text";
+              modal.addComponents(
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("text").setLabel(kindTitle).setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(3000)),
+                // "اقدر في كل الرسايل احط صورة تحت داخل الايمبد"
+                new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("image").setLabel("Image URL (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500)),
+              );
+              return interaction.showModal(modal);
+            }
+            if (fileAction === "del") return interaction.update(filesDeleteView(file));
+            if (fileAction === "del2") {
+              db.prepare("DELETE FROM files WHERE id=?").run(file.id);
+              return interaction.update(filesSection(`🗑️ Deleted **${file.name}** — its rooms stay untouched.`));
+            }
+            return interaction.update(filesFileView(file));
+          }
+          // إنشاء ملف جديد: خطوة 1/3 — الروم الرئيسي
+          if (parts[1] === "new") {
+            return interaction.reply({
+              content: "📁 **Create Files — step 1/3:** pick the **main room** of the files.",
+              components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder()
+                .setCustomId("d7_files_main_ch")
+                .setPlaceholder("Pick the files MAIN room")
+                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                .setMinValues(1).setMaxValues(1))],
+              flags: 64,
+            });
           }
           return interaction.update(filesSection());
         }
@@ -2822,14 +2941,19 @@ async function handleInteraction(interaction) {
       return interaction.editReply({ content: `✅ Scripts board posted in <#${channelId}> — every script with its price, status and Preview button. It repaints itself on every bot start and whenever a script changes.` }).catch(() => {});
     }
 
-    // ─────────── حفظ روم صور نظام Files ───────────
-    // الرابط يظهر كزر أزرق تحت زر الفيديو في كل إيمبد ملفات يُنشر
-    if (interaction.isChannelSelectMenu() && interaction.customId === "d7_files_images_ch") {
+    // ─────────── Add Script: اختيار المنتج ← نافذة بقيم المنتج ───────────
+    if (interaction.isStringSelectMenu() && interaction.customId === "d7_scripts_prod_sel") {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-      config.files ||= {};
-      config.files.imagesChannelId = interaction.values[0];
-      saveConfig();
-      return interaction.update(filesSection("✅ Images room saved — its link button appears under the video in every files embed."));
+      const p = db.prepare("SELECT * FROM products WHERE id=?").get(Number(interaction.values[0]));
+      if (!p) return interaction.reply({ content: "❌ That product no longer exists.", ephemeral: true });
+      const modal = new ModalBuilder().setCustomId(`d7_scripts_add:${p.id}`).setTitle(`Add ${p.name}`.slice(0, 45));
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("name").setLabel("Script name (from the product)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setValue(String(p.name).slice(0, 100))),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("price").setLabel("Price (from the product)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(40).setValue(String(p.price ?? "").slice(0, 40))),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("status").setLabel("Status (active / wip)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10).setPlaceholder("active")),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("preview").setLabel("Preview link (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(300)),
+      );
+      return interaction.showModal(modal);
     }
 
     // ─────────── تعديل سكربت: اختيار ← نافذة بقيم حالية ───────────
@@ -2841,7 +2965,7 @@ async function handleInteraction(interaction) {
       modal.addComponents(
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("name").setLabel("Script name").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setValue(String(s.name).slice(0, 100))),
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("price").setLabel("Price (e.g. 25 SAR)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(40).setValue(String(s.price || "").slice(0, 40))),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("active").setLabel("Active? (yes/no)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(5).setValue(Number(s.active) ? "yes" : "no")),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("status").setLabel("Status (active / wip)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10).setValue(s.status === "wip" ? "wip" : "active")),
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("preview").setLabel("Preview link (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(300).setValue(String(s.preview_url || "").slice(0, 300))),
       );
       return interaction.showModal(modal);
@@ -2859,24 +2983,55 @@ async function handleInteraction(interaction) {
       return;
     }
 
-    // ─────────── إرسال إيمبد Files ───────────
-    // القائمة لا تعرض إلا رومات الكاتيقوري، ونتحقق ثانية هنا لمنع أي
-    // رسالة قديمة من زحفل الإيمبد خارج كاتيقوري الملفات
-    if (interaction.isStringSelectMenu() && interaction.customId === "d7_files_room_sel") {
+    // ─────────── إنشاء ملف: خطوات تحديد الرومات الثلاث ───────────
+    // كل روم يجب أن تكون داخل كاتيقوري الملفات، وإلا نعيد الخطوة
+    // بمساعد نص يجبّد الصفحة ويُعاد اختيار روم صحيحة
+    const filesRoomSteps = {
+      d7_files_main_ch: { next: "d7_files_show_ch", title: "step 2/3", hint: "the **showcase/images room**" },
+      d7_files_show_ch: { next: "d7_files_upd_ch", title: "step 3/3", hint: "the **updates room**" },
+      d7_files_upd_ch: { next: "d7_files_upd_ch", title: "step 3/3", hint: "the **updates room**" },
+    };
+    if (interaction.isChannelSelectMenu() && filesRoomSteps[interaction.customId]) {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
-      const draft = pendingFiles.get(interaction.user.id);
-      if (!draft) return interaction.reply({ content: "❌ The draft expired — press New Embed again.", ephemeral: true });
-      await interaction.deferReply({ flags: 64 }).catch(() => {});
       const channelId = interaction.values[0];
-      const channel = interaction.guild.channels.cache.get(channelId);
-      if (!channel?.isTextBased()) return interaction.editReply({ content: "That room is not available to me." }).catch(() => {});
-      if (channel.parentId !== FILES_CATEGORY_ID) {
-        return interaction.editReply({ content: `❌ This embed can only go inside the files category (<#${FILES_CATEGORY_ID}>).` }).catch(() => {});
+      const channel = filesRoomInCategory(interaction.guild, channelId);
+      if (!channel) {
+        return interaction.reply({
+          content: `❌ That room is not inside the files category (<#${FILES_CATEGORY_ID}>) — pick a room from it.`,
+          components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder()
+            .setCustomId(interaction.customId)
+            .setPlaceholder(filesRoomSteps[interaction.customId].title === "step 3/3" ? "Pick the files UPDATES room" : filesRoomSteps[interaction.customId].title === "step 2/3" ? "Pick the files SHOWCASE room" : "Pick the files MAIN room")
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+            .setMinValues(1).setMaxValues(1))],
+          flags: 64,
+        });
       }
-      const sent = await channel.send(filesPayload(draft, interaction.guild)).catch(() => null);
-      pendingFiles.delete(interaction.user.id);
-      if (!sent) return interaction.editReply({ content: `❌ Could not post there — check that I can send messages in <#${channelId}>.` }).catch(() => {});
-      return interaction.editReply({ content: `✅ Files embed posted in <#${channelId}>.` }).catch(() => {});
+      const step = filesRoomSteps[interaction.customId];
+      const draft = pendingFiles.get(interaction.user.id) || {};
+      if (interaction.customId === "d7_files_main_ch") draft.main = channelId;
+      if (interaction.customId === "d7_files_show_ch") draft.show = channelId;
+      if (interaction.customId === "d7_files_upd_ch") draft.upd = channelId;
+      pendingFiles.set(interaction.user.id, draft);
+      // الخطوة الأخيرة تفتح نافذة (الاسم + التفاصيل + رابط المعاينة)
+      if (interaction.customId === "d7_files_upd_ch") {
+        const modal = new ModalBuilder().setCustomId("panel_modal:files").setTitle("New file");
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("name").setLabel("File name").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("details").setLabel("Known details").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000)),
+          // "خلي الزر حق preview فوق في داخل الايمبد" — رابط يظهر أزرق أعلى كل رسالة من هذا الملف
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("preview").setLabel("Preview video link (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(300)),
+        );
+        return interaction.showModal(modal);
+      }
+      return interaction.reply({
+        content: `📁 **Create Files — ${step.title}:** pick **${step.hint}**`,
+        components: [new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder()
+          .setCustomId(step.next)
+          .setPlaceholder(step.title === "step 3/3" ? "Pick the files UPDATES room" : "Pick the files SHOWCASE room")
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          .setMinValues(1).setMaxValues(1))],
+        flags: 64,
+      });
     }
 
     // ─────────── اختيار روم نشر المنتجات ───────────
@@ -3238,20 +3393,27 @@ async function handleInteraction(interaction) {
       await interaction.reply({ content: "✅ Ticket panel text saved.", ephemeral: true });
       return interaction.message?.edit(ticketsSection()).catch(() => {});
     }
-    // ─────────── إضافة سكربت إلى اللوحة ───────────
-    if (interaction.isModalSubmit() && interaction.customId === "d7_scripts_add") {
+    // ─────────── إضافة سكربت من منتج لوحة المنتجات ───────────
+    // الحالتان فقط: active أو wip (قيد الإنشاء) — "اقدر اضيف منتجات فقط
+    // واخليها active ولا قيد الانشاء"
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("d7_scripts_add:")) {
       if (!hasStaff(interaction.member)) return interaction.reply({ content: "Staff only.", ephemeral: true });
+      const productId = Number(interaction.customId.split(":")[1]);
+      const product = db.prepare("SELECT * FROM products WHERE id=?").get(productId);
+      if (!product) return interaction.reply({ content: "❌ That product no longer exists.", ephemeral: true });
       const name = (interaction.fields.getTextInputValue("name") || "").trim();
       if (!name) return interaction.reply({ content: "❌ The script name is required.", ephemeral: true });
       const price = (interaction.fields.getTextInputValue("price") || "").trim();
-      const active = /^(y|yes|true|1|فعال|نشط)/i.test((interaction.fields.getTextInputValue("active") || "").trim()) ? 1 : 0;
+      const status = scriptStatusFromText(interaction.fields.getTextInputValue("status"));
       const preview = (interaction.fields.getTextInputValue("preview") || "").trim();
       if (preview && !/^https?:\/\//.test(preview)) {
         return interaction.reply({ content: "❌ The preview link must start with http:// or https://.", ephemeral: true });
       }
-      db.prepare("INSERT INTO scripts (name, price, active, preview_url) VALUES (?,?,?,?)").run(name, price, active, /^https?:\/\//.test(preview) ? preview : "");
+      db.prepare("INSERT INTO scripts (name, price, active, preview_url, product_id, status) VALUES (?,?,?,?,?,?)")
+        .run(name, price, status === "active" ? 1 : 0, /^https?:\/\//.test(preview) ? preview : "", product.id, status);
       // الاعتراف بالضغط أولاً (تحديث اللوحة نفسها)، ثم شبكة إعادة رسم اللوحة المنشورة
-      await interaction.reply({ content: `✅ Added **${name}** — it appears on the published board right away.`, ephemeral: true });
+      const stateTxt = status === "active" ? "✅ Active" : "🚧 In Development";
+      await interaction.reply({ content: `✅ Added **${name}** (${stateTxt}) — it appears on the published board right away.`, ephemeral: true });
       await interaction.message?.edit(scriptsSection()).catch(() => {});
       await refreshScriptsBoard(interaction.guild).catch(() => {});
       return;
@@ -3265,13 +3427,13 @@ async function handleInteraction(interaction) {
       const name = (interaction.fields.getTextInputValue("name") || "").trim();
       if (!name) return interaction.reply({ content: "❌ The script name is required.", ephemeral: true });
       const price = (interaction.fields.getTextInputValue("price") || "").trim();
-      const active = /^(y|yes|true|1|فعال|نشط)/i.test((interaction.fields.getTextInputValue("active") || "").trim()) ? 1 : 0;
+      const status = scriptStatusFromText(interaction.fields.getTextInputValue("status"));
       const preview = (interaction.fields.getTextInputValue("preview") || "").trim();
       if (preview && !/^https?:\/\//.test(preview)) {
         return interaction.reply({ content: "❌ The preview link must start with http:// or https://.", ephemeral: true });
       }
-      db.prepare("UPDATE scripts SET name=?, price=?, active=?, preview_url=? WHERE id=?")
-        .run(name, price, active, /^https?:\/\//.test(preview) ? preview : "", id);
+      db.prepare("UPDATE scripts SET name=?, price=?, active=?, preview_url=?, status=? WHERE id=?")
+        .run(name, price, status === "active" ? 1 : 0, /^https?:\/\//.test(preview) ? preview : "", status, id);
       await interaction.reply({ content: `✏️ Updated **${name}** — the published board repainted.`, ephemeral: true });
       await interaction.message?.edit(scriptsSection()).catch(() => {});
       await refreshScriptsBoard(interaction.guild).catch(() => {});
@@ -3334,35 +3496,51 @@ async function handleInteraction(interaction) {
           flags: 64,
         });
       }
-      // ─────────── نافذة إيمبد Files: مسودة ثم رومات الكاتيقوري ───────────
+      // ─────────── نافذة إنشاء ملف جديد (بعد تحديد الرومات الثلاث) ───────────
       if (kind === "files") {
-        const video = (interaction.fields.getTextInputValue("video") || "").trim();
-        if (!/^https?:\/\//.test(video)) {
-          return interaction.reply({ content: "❌ The video link must start with http:// or https://.", ephemeral: true });
+        const draft = pendingFiles.get(interaction.user.id);
+        if (!draft?.main || !draft?.show || !draft?.upd) {
+          pendingFiles.delete(interaction.user.id);
+          return interaction.reply({ content: "❌ The room picking expired — press **Create Files** again.", ephemeral: true });
         }
-        pendingFiles.set(interaction.user.id, {
-          title: (interaction.fields.getTextInputValue("title") || "").trim().slice(0, 256),
-          body: (interaction.fields.getTextInputValue("body") || "").trim().slice(0, 4096),
-          video,
-        });
-        // "يوريني الرومات وأنا أحدد أي روم أبي أرسل فيه" — رومات الكاتيقوري
-        // فقط، من كاش البوت (اسم الروم في السطر، الـ id في القيمة)
-        const rooms = [...interaction.guild.channels.cache.values()]
-          .filter(c => c.parentId === FILES_CATEGORY_ID && c.isTextBased?.());
-        if (!rooms.length) {
-          return interaction.reply({ content: `❌ No text channels found inside the files category <#${FILES_CATEGORY_ID}>.`, ephemeral: true });
+        const preview = (interaction.fields.getTextInputValue("preview") || "").trim();
+        if (preview && !/^https?:\/\//.test(preview)) {
+          return interaction.reply({ content: "❌ The preview link must start with http:// or https://.", ephemeral: true });
         }
-        return interaction.reply({
-          content: "📁 Pick the room — only channels of the files category are listed.",
-          components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
-            .setCustomId("d7_files_room_sel")
-            .setPlaceholder("Files category rooms")
-            .setMinValues(1).setMaxValues(1)
-            .addOptions(rooms.slice(0, 25).map(c => new StringSelectMenuOptionBuilder()
-              .setLabel(String(c.name || c.id).slice(0, 100))
-              .setValue(String(c.id)))))],
-          flags: 64,
+        const name = (interaction.fields.getTextInputValue("name") || "").trim();
+        if (!name) return interaction.reply({ content: "❌ The file name is required.", ephemeral: true });
+        const details = (interaction.fields.getTextInputValue("details") || "").trim();
+        const res = db.prepare("INSERT INTO files (name, details, preview_url, main_channel_id, show_channel_id, updates_channel_id) VALUES (?,?,?,?,?,?)")
+          .run(name.slice(0, 80), details.slice(0, 4096), /^https?:\/\//.test(preview) ? preview : "", draft.main, draft.show, draft.upd);
+        pendingFiles.delete(interaction.user.id);
+        const created = db.prepare("SELECT * FROM files WHERE id=?").get(Number(res.lastInsertRowid));
+        return interaction.message?.edit(filesSection(`✅ Created **${created.name}** — its button is below. Open it for Send Message / Send Update / Send Showcase.`)).catch(() => {
+          return interaction.reply({ content: `✅ Created **${created.name}** — reopen the Files section to see its button.`, ephemeral: true });
         });
+      }
+      // ─────────── أزرار إرسال الملف (رسالة/تحديث/عرض): نص + صورة ───────────
+      // كل رسالة تحمل رابط المعاينة أزرق أعلى الإيمبد والصورة تحته
+      if (kind === "files_msg" || kind === "files_upd" || kind === "files_show") {
+        const fileId = Number(interaction.customId.split(":")[2]);
+        const file = db.prepare("SELECT * FROM files WHERE id=?").get(fileId);
+        if (!file) return interaction.reply({ content: "❌ That file no longer exists.", ephemeral: true });
+        const roomId = kind === "files_upd" ? file.updates_channel_id : kind === "files_show" ? file.show_channel_id : file.main_channel_id;
+        // حماية ثانية: الروومات كانت داخل الكاتيقوري عند الإنشاء
+        const channel = filesRoomInCategory(interaction.guild, roomId);
+        if (!channel) {
+          return interaction.reply({ content: `❌ That file's room is not inside the files category (<#${FILES_CATEGORY_ID}>) anymore — recreate the file with a valid room.`, ephemeral: true });
+        }
+        const image = (interaction.fields.getTextInputValue("image") || "").trim();
+        if (image && !/^https?:\/\//.test(image)) {
+          return interaction.reply({ content: "❌ The image URL must start with http:// or https://.", ephemeral: true });
+        }
+        const payload = filesSendPayload(file, kind.slice(6), (interaction.fields.getTextInputValue("text") || "").trim(), image);
+        const sent = await channel.send(payload).catch(() => null);
+        if (!sent) {
+          return interaction.reply({ content: `❌ Could not post in <#${roomId}> — check that I can send messages there.`, ephemeral: true });
+        }
+        const doneTxt = kind === "files_upd" ? "Update" : kind === "files_show" ? "Showcase" : "Message";
+        return interaction.reply({ content: `✅ ${doneTxt} posted in <#${roomId}> — the preview link is blue inside the embed${image ? " with your image under it" : ""}.`, ephemeral: true });
       }
       if (kind === "add-price") {
         const price = Number(interaction.fields.getTextInputValue("price").replace(/,/g, ""));

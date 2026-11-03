@@ -113,7 +113,9 @@ CREATE TABLE IF NOT EXISTS scripts (
   price TEXT NOT NULL DEFAULT '',
   active INTEGER NOT NULL DEFAULT 1,
   preview_url TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  product_id INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active'
 );
 `);
 
@@ -124,6 +126,31 @@ if (!orderCols.some(c => c.name === "status_msg_id")) {
   console.log("Migrating orders table: adding status_msg_id…");
   db.exec(`ALTER TABLE orders ADD COLUMN status_msg_id TEXT DEFAULT ''`);
 }
+
+// ─────────── ترحيل جدول Scripts (قيد الإنشاء/Active + ربط المنتج) ───────────
+const scriptCols = db.prepare(`PRAGMA table_info(scripts)`).all();
+if (!scriptCols.some(c => c.name === "product_id")) {
+  console.log("Migrating scripts table: adding product_id…");
+  db.exec(`ALTER TABLE scripts ADD COLUMN product_id INTEGER NOT NULL DEFAULT 0`);
+}
+if (!scriptCols.some(c => c.name === "status")) {
+  console.log("Migrating scripts table: adding status…");
+  db.exec(`ALTER TABLE scripts ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`);
+}
+
+// ─────────── نظام Files: كيانات ملفات لها ثلاث رومات (رئيسي/عرض/تحديثات) ───────────
+db.exec(`
+CREATE TABLE IF NOT EXISTS files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '',
+  preview_url TEXT NOT NULL DEFAULT '',
+  main_channel_id TEXT NOT NULL DEFAULT '',
+  show_channel_id TEXT NOT NULL DEFAULT '',
+  updates_channel_id TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+`);
 
 // ═══════════════ Tickets (numbered, one channel per ticket) ═══════════════
 db.tickets = {

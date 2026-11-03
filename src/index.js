@@ -1270,7 +1270,9 @@ function filesSendPayload(file, kind, text, image) {
   const isShow = kind === "show";
   const title = isUpd ? `${file.name} — Update` : isShow ? `${file.name} — Showcase` : file.name;
   const parts = [];
-  if (/^https?:\/\//.test(String(file.preview_url || ""))) parts.push(`[Preview video](${file.preview_url})`);
+  // رابط المعاينة يظهر في رسالة الملف والتحديث فقط — طلب المالك:
+  // "في نظام الملفات لمن ارسل showcase في زر في الايمبد previewvideo احدفه"
+  if (!isShow && /^https?:\/\//.test(String(file.preview_url || ""))) parts.push(`[Preview video](${file.preview_url})`);
   const bodyText = String(text || "").trim() || file.details || "";
   if (bodyText) parts.push(bodyText);
   const e = embed(title, parts.join("\n\n"));

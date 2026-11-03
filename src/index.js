@@ -1025,7 +1025,7 @@ function freeSection(message) {
     embeds: [embed("Control Center · Free", [
       "Publish a free script, map or anything else as its own message.",
       "",
-      "The post carries your **title** and **text**, the **download link** as blue text inside the embed, and a **Preview** button under it — leave the preview link empty and pressing it answers «لا يوجد preview».",
+      "The post carries your **title** and **text**, blue **Download** and **Preview** links inside the embed, and an optional **image** — leave the preview link empty and only Download shows.",
       "",
       "Press **New Post** to write one — you'll pick the room after the window.",
     ].join("\n"))],
@@ -1037,14 +1037,16 @@ function freeSection(message) {
   };
 }
 
-// حمولة المنشور المجاني: الرابط الأزرق داخل الإيمبد + زر Preview
-// (رابط أزرق إن وُجد، وإلا زر عادي يجيب «لا يوجد preview»)
+// حمولة المنشور المجاني: رابطا Download و Preview نصان زرقان داخل
+// الإيمبد — طلب صاحب اللوحة: "غير زر preview خليها زي download وشيل
+// الايموجي اللي عند download وخليهم الاثنين كبتل" + صورة اختيارية
+// (بلا رابط معاينة لا يظهر سطر Preview إطلاقاً — ما عاد فيه زر يُضغط)
 function freePayload(draft) {
-  const e = embed(draft.title, [draft.body, "", `📥 [Download](${draft.download})`].join("\n"));
-  const preview = /^https?:\/\//.test(String(draft.preview || ""))
-    ? new ButtonBuilder().setLabel("👁️ Preview").setStyle(ButtonStyle.Link).setURL(draft.preview)
-    : new ButtonBuilder().setCustomId("d7_free_preview_none").setLabel("👁️ Preview").setStyle(ButtonStyle.Secondary);
-  return { embeds: [e], components: [new ActionRowBuilder().addComponents(preview)] };
+  const lines = [draft.body, "", `[Download](${draft.download})`];
+  if (/^https?:\/\//.test(String(draft.preview || ""))) lines.push(`[Preview](${draft.preview})`);
+  const e = embed(draft.title, lines.join("\n"));
+  if (/^https?:\/\//.test(String(draft.image || ""))) e.setImage(draft.image);
+  return { embeds: [e], components: [] };
 }
 
 // ─────────── نظام Scripts: لوحة كاملة لكل السكربتات ───────────
@@ -2344,6 +2346,8 @@ async function handleInteraction(interaction) {
               new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("body").setLabel("Text").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000)),
               new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("download").setLabel("Download link (required)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(300)),
               new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("preview").setLabel("Preview link (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(300)),
+              // طلب صاحب اللوحة: "خلي انه اقدر اضيف صورة تحت" — صورة الإيمبد
+              new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("image").setLabel("Image URL (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500)),
             );
             return interaction.showModal(modal);
           }
@@ -2782,7 +2786,7 @@ async function handleInteraction(interaction) {
       const sent = await channel.send(freePayload(draft)).catch(() => null);
       pendingFree.delete(interaction.user.id);
       if (!sent) return interaction.editReply({ content: `❌ Could not post there — check that I can send messages in <#${channelId}>.` }).catch(() => {});
-      return interaction.editReply({ content: `✅ Free post published in <#${channelId}> — blue Download link inside the embed; Preview answers «لا يوجد preview» when it has no link.` }).catch(() => {});
+      return interaction.editReply({ content: `✅ Free post published in <#${channelId}> — blue Download and Preview links inside the embed (Preview shows only when a link exists).` }).catch(() => {});
     }
 
     // ─────────── نشر لوحة السكربتات في روم ───────────
@@ -3309,11 +3313,16 @@ async function handleInteraction(interaction) {
         if (preview && !/^https?:\/\//.test(preview)) {
           return interaction.reply({ content: "❌ The preview link must start with http:// or https://.", ephemeral: true });
         }
+        const image = (interaction.fields.getTextInputValue("image") || "").trim();
+        if (image && !/^https?:\/\//.test(image)) {
+          return interaction.reply({ content: "❌ The image URL must start with http:// or https://.", ephemeral: true });
+        }
         pendingFree.set(interaction.user.id, {
           title: (interaction.fields.getTextInputValue("title") || "").trim().slice(0, 256),
           body: (interaction.fields.getTextInputValue("body") || "").trim().slice(0, 4096),
           download,
           preview,
+          image: /^https?:\/\//.test(image) ? image : "",
         });
         return interaction.reply({
           content: "📤 Pick the room — the post goes live there.",

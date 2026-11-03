@@ -14,6 +14,10 @@ const config = require("../config.json");
 const CONFIG_FILE = path.join(__dirname, "..", "config.json");
 const STARS_FULL = ["", "⭐", "⭐⭐", "⭐⭐⭐", "⭐⭐⭐⭐", "⭐⭐⭐⭐⭐"];
 
+// طلب المالك: "خلي في كل تقييم يجي معه صورة تحت اخر شي" — صورة ثابتة تظهر
+// أسفل كل إيمبد تقييم (الخاص والتبديل اللغتي ومنشور روم التقييمات)
+const REVIEW_IMAGE = "https://i.postimg.cc/Xv825bzt/review.png";
+
 function ratingCfg() {
   config.channels ||= {};
   return config.channels;
@@ -54,7 +58,8 @@ async function sendPurchaseDM(target, product, client, guild) {
       .setColor(EMBED_COLOR)
       .setThumbnail(EMBED_THUMB)
       .setTitle("Thank you for purchase")
-      .setDescription(`\n**Products**\n**${product.name}**\n\nشكراً لثقتك بنا 💙\nنتمنى أن تكون تجربتك معنا رائعة.\nقيّم تجربتك بالأسفل ⭐`);
+      .setDescription(`\n**Products**\n**${product.name}**\n\nشكراً لثقتك بنا 💙\nنتمنى أن تكون تجربتك معنا رائعة.\nقيّم تجربتك بالأسفل ⭐`)
+      .setImage(REVIEW_IMAGE);
     const starRow = new ActionRowBuilder().addComponents(
       [1, 2, 3, 4, 5].map(s => new ButtonBuilder()
         .setCustomId(`rate_star_${s}_${guild?.id || "0"}_${product.id}_ar`)
@@ -92,7 +97,8 @@ async function handleLangButton(interaction) {
     .setColor(EMBED_COLOR)
     .setThumbnail(EMBED_THUMB)
     .setTitle(ar ? "Thank you for purchase" : "Rate your experience")
-    .setDescription("\n" + desc);
+    .setDescription("\n" + desc)
+    .setImage(REVIEW_IMAGE);
   const starRow = new ActionRowBuilder().addComponents(
     [1, 2, 3, 4, 5].map(s => new ButtonBuilder()
       .setCustomId(`rate_star_${s}_${guildId}_${pid}_${lang}`)
@@ -189,7 +195,7 @@ async function handleCommentModal(interaction) {
           { name: "**Rating**", value: `**${STARS_FULL[stars]} (${stars}/5)**` },
           { name: "**Comment**", value: comment ? `**${comment}**` : "—" },
           { name: "**Rating by**", value: `<@${interaction.user.id}>` },
-        );
+        ).setImage(REVIEW_IMAGE);
       await ch.send({ embeds: [e] }).catch(err => console.warn("فشل إرسال التقييم للروم: " + err.message));
     } else {
       console.warn(`روم التقييمات ${reviewsChannelId} غير موجود`);

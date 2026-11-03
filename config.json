@@ -2,7 +2,7 @@
   "brand": {
     "name": "S2A DEV",
     "color": "#2fa2fa",
-    "footer": "S2A DEV • Store System"
+    "footer": "S2A DEV"
   },
   "channels": {
     "welcome": "1561445389939253298",
@@ -35,7 +35,7 @@
     "panel": {
       "title": "🎫 Support Tickets",
       "description": "Welcome to our support system!\nSelect a ticket type from the menu below and a private channel will be created for you.",
-      "footer": "S2A DEV • Store System",
+      "footer": "",
       "image": "https://i.postimg.cc/rpdMpfmH/ticket.png"
     },
     "ticketTypes": [
@@ -84,7 +84,7 @@
     "helpChannelId": "1561449062564102144",
     "releasesChannelId": "1561446637233250424",
     "imageUrl": "https://i.postimg.cc/XvrZPFSc/welcome.png",
-    "footer": "**All Rights Reserved S2A DEV**"
+    "footer": ""
   },
   "permissions": {
     "adminUserIds": []

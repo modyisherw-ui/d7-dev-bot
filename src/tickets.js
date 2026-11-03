@@ -149,8 +149,7 @@ async function handleSelect(interaction) {
       .setThumbnail(EMBED_THUMB)
       .setTitle(`${type.emoji || "🎫"} ${type.label} #${number}`)
       .setDescription(`Welcome <@${interaction.user.id}>!\nPlease describe your issue and our staff will assist you shortly.`)
-      .setFooter({ text: config.brand?.footer || "S2A DEV" })
-      .setTimestamp();
+      .setFooter({ text: config.brand?.footer || "S2A DEV" });
     const controlRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("d7_tk_claim").setLabel("📥 Claim").setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId("d7_tk_summon").setLabel("📣 Summon").setStyle(ButtonStyle.Secondary),
@@ -230,7 +229,7 @@ async function handleClose(interaction) {
         { name: "المستخدم", value: `<@${ticket.user_id}>` },
         { name: "أغلقها", value: `<@${interaction.user.id}>` },
         { name: "النوع", value: ticket.type }
-      ).setTimestamp()],
+      )],
       files: [file],
     }).catch(() => {});
   }
@@ -240,8 +239,7 @@ async function handleClose(interaction) {
     await user.send({
       embeds: [new EmbedBuilder().setColor(TICKET_COLOR).setThumbnail(EMBED_THUMB).setTitle("🔒 Your ticket has been closed")
         .setDescription(`Your ticket **#${ticket.number}** has been closed. If you need more help, feel free to open a new ticket!\nتم قفل تذكرتك **رقم ${ticket.number}**، إذا كنت بحاجة لأي مساعدة يمكنك فتح تذكرة جديدة.`)
-        .setFooter({ text: config.brand?.footer || "S2A DEV" })
-        .setTimestamp()],
+        .setFooter({ text: config.brand?.footer || "S2A DEV" })],
       files: [file],
     }).catch(() => {});
   }

@@ -737,8 +737,7 @@ function ticketsSection() {
       `**Log channel:** ${safeChannelId(t.logChannelId) ? `<#${t.logChannelId}>` : "Not set"}`,
       `**Support roles:** ${(t.staffRoles || []).length ? t.staffRoles.map(r => `<@&${r}>`).join(" ") : "None"}`,
     ].join("\n"))
-    .setFooter({ text: config.brand?.footer || "S2A DEV" })
-    .setTimestamp();
+    .setFooter({ text: config.brand?.footer || "S2A DEV" });
 
   const rows = [];
   // 5 أزرار كحد أقصى في كل صف — نقسّم الأنواع على صفوف

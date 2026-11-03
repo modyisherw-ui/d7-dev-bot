@@ -14,8 +14,7 @@ function embed(title, description = "") {
     .setThumbnail(EMBED_THUMB)
     .setTitle(title)
     .setDescription(description)
-    .setFooter({ text: config.brand.footer || "S2A DEV" })
-    .setTimestamp();
+    .setFooter({ text: config.brand.footer || "S2A DEV" });
 }
 
 function hasStaff(member) {

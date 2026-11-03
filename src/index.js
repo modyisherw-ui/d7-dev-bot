@@ -1071,10 +1071,21 @@ function scriptStatusLine(s) {
   return `Price: ${s.price || "Free"} · ${status} · 🧾 ${scriptSalesCount(s.product_id)} sale(s)`;
 }
 
+// سطر السكربت في اللوحة المنشورة وقسم اللوحة: الاسم وتحته سطر السعر،
+// وإذا للسكربت رابط معاينة يأتي خط أزرق [Preview] تحته مباشرة — طلب
+// المالك: "ابي الزر يكون تحتها السطر اللي تحته ومكتوب Preview كابتل
+// بالون الازرق" فصار خطاً أزرق تحت السعر بدل الزر المنفصل أسفل الرسالة
+function scriptBoardLine(s, i) {
+  const head = `${i + 1}. **${s.name}**\n> ${scriptStatusLine(s)}`;
+  return /^https?:\/\//.test(String(s.preview_url || ""))
+    ? `${head}\n> [Preview](${s.preview_url})`
+    : head;
+}
+
 function scriptsSection(message) {
   const list = db.prepare("SELECT * FROM scripts ORDER BY id DESC LIMIT 30").all();
   const lines = list.length
-    ? list.map((s, i) => `${i + 1}. **${s.name}**\n> ${scriptStatusLine(s)}${/^https?:\/\//.test(String(s.preview_url || "")) ? " · 👁️" : ""}`).join("\n")
+    ? list.map((s, i) => scriptBoardLine(s, i)).join("\n")
     : "No scripts yet. Press **Add Script** below — scripts are picked from your existing products.";
   return {
     embeds: [embed("Control Center · Scripts", [
@@ -1082,7 +1093,7 @@ function scriptsSection(message) {
       "",
       lines,
       "",
-      "**Add Script** picks one of your **Products** and puts it on the board as Active or In Development — Publish puts the full board in a room with a Preview button per script.",
+      "**Add Script** picks one of your **Products** and puts it on the board as Active or In Development — Publish puts the full board in a room with a blue **[Preview]** link right under every script.",
     ].join("\n"))],
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("panel:scripts:add").setLabel("➕ Add Script").setStyle(ButtonStyle.Success),
@@ -1095,39 +1106,33 @@ function scriptsSection(message) {
   };
 }
 
-// حمولة اللوحة المنشورة: اسم كل سكربت وتحته السعر والحالة وعدد عمليات
-// الشراء — بلا إيموجي الفلوس، والعنوان بلا رمز لأن اللوقو الصغير يأتي
-// من صورة الإيمبد اليمينية في كل الرسائل
-function scriptsPayload(opts = {}) {
-  const published = !!opts.published;
+// رابط الصورة الثابتة التي تظهر آخر شي أسفل اللوحة المنشورة — طلب المالك:
+// "خلي لمن ارسل اللوحه اسوي لها publish يرسل مع اللوحه صورة تحت اخر شي"
+const SCRIPTS_BOARD_IMAGE = "https://i.postimg.cc/W4x48Kz0/scripts.png";
+
+// حمولة اللوحة المنشورة: اسم كل سكربت وتحته سطر السعر والحالة وعدد عمليات
+// الشراء (بلا إيموجي الفلوس)، وإذا له معاينة خط أزرق [Preview] تحته —
+// طلب المالك: "ابي الزر يكون تحتها السطر اللي تحته ومكتوب Preview كابتل
+// بالون الازرق" فصار خطاً أزرق تحت السعر بدل الزر المنفصل أسفل الرسالة،
+// وحُذفت فقرة Live board، وصورة اللوحة الثابتة آخر شيء في الإيمبد
+function scriptsPayload() {
   const list = db.prepare("SELECT * FROM scripts ORDER BY id ASC").all();
   const lines = list.length
-    ? list.map((s, i) => `${i + 1}. **${s.name}**\n> ${scriptStatusLine(s)}`).join("\n")
+    ? list.map((s, i) => scriptBoardLine(s, i)).join("\n")
     : "No scripts yet.";
   const e = embed("S2A DEV Scripts", [
     `**${list.length} script(s)** — tap Preview for a script's demo.`,
     "",
     lines,
-    ...(published ? ["", "📌 **Live board** — repaints itself whenever a script changes or the bot starts."] : []),
-  ].join("\n"));
-  const buttons = list.map(s => {
-    const label = `👁️ ${s.name}`.slice(0, 80);
-    return /^https?:\/\//.test(String(s.preview_url || ""))
-      ? new ButtonBuilder().setLabel(label).setStyle(ButtonStyle.Link).setURL(s.preview_url)
-      : new ButtonBuilder().setCustomId(`d7_script_preview:${s.id}`).setLabel(label).setStyle(ButtonStyle.Secondary);
-  });
-  const rows = [];
-  for (let i = 0; i < Math.min(buttons.length, 25); i += 5) {
-    rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
-  }
-  return { embeds: [e], components: rows };
+  ].join("\n")).setImage(SCRIPTS_BOARD_IMAGE);
+  return { embeds: [e], components: [] };
 }
 
 // شاشة اختيار روم نشر لوحة السكربتات (نفس نمط الطلبات والتحليلات)
 function scriptsPublishView() {
   return {
     embeds: [embed("📤 Publish the Scripts board", [
-      "Pick the channel - the bot posts the full board there as a **permanent message**: every script with its price, status and a Preview button.",
+      "Pick the channel - the bot posts the full board there as a **permanent message**: every script with its price, status and a blue **[Preview]** link under it.",
       "",
       "Publishing in another channel **moves** the board (the old message is removed).",
     ].join("\n"))],

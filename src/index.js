@@ -2299,11 +2299,13 @@ async function handleInteraction(interaction) {
         }
         return interaction.reply({ content: "لا يوجد preview", flags: 64 });
       }
-      // زر استكمال نوافذ العرض (احتياط إن رفض ديسكورد فتح نافذة بعد نافذة)
+      // زر استكمال نوافذ العرض — المسار الأساسي للانتقال بين النوافذ الثلاث
+      // تنبيه الفهارس: التوزيع هنا [action, ...parts] فأول عنصر في
+      // parts هو معرّف الملف والثاني المرحلة
       if (action === "d7_show_more") {
         const draft = db.showcaseDrafts.get(interaction.user.id);
-        const fileId = Number(parts[1]);
-        const stage = Number(parts[2]) === 3 ? 3 : 2;
+        const fileId = Number(parts[0]);
+        const stage = Number(parts[1]) === 3 ? 3 : 2;
         if (!draft || Number(draft.fileId) !== fileId) {
           return interaction.reply({ content: "❌ The showcase flow expired — press **Send Showcase** on the file again.", flags: 64 });
         }
@@ -3627,9 +3629,10 @@ async function handleInteraction(interaction) {
         return interaction.reply({ content: `✅ ${doneTxt} posted in <#${roomId}> — your text comes first, then the blue Download and Preview links inside the embed${download ? "" : ""}${image ? " with your image under them" : ""}.`, ephemeral: true });
       }
       // ─────────── رسالة العرض: عشر خانات صور عبر نوافذ متسلسلة ───────────
-      // المرحلة الأولى: النص + 4 صور، ثم تُفتح نافذة الصور 5–9 تلقائياً
-      // (وبإمكانها فشل فتُعرض زر استكمال) — المسودة تبقى مع المستخدم حتى
-      // الخانة العاشرة ثم الإرسال إلى روم العرض
+      // كل نافذة تُنهى بزر (+ Continue) يفتح التالية — فتح نافذة فوق نافذة
+      // مباشرة رفضه ديسكورد مرتين في الإنتاج وكانت تنكسر السلسلة
+      // بـ"expired"، وأزرار البوت تفتح النوافذ دائماً بلا فشل. المسودة في
+      // قاعدة البيانات فما تضيع حتى مع إعادة تشغيل البوت
       if (kind === "files_show") {
         const fileId = Number(interaction.customId.split(":")[2]);
         const file = db.prepare("SELECT * FROM files WHERE id=?").get(fileId);
@@ -3637,19 +3640,14 @@ async function handleInteraction(interaction) {
         const { images, bad } = collectShowcaseImages(interaction, 1, 4);
         if (bad) return interaction.reply({ content: "❌ Every image URL must start with http:// or https://.", ephemeral: true });
         db.showcaseDrafts.set(interaction.user.id, fileId, (interaction.fields.getTextInputValue("text") || "").trim(), images);
-        try {
-          await interaction.showModal(filesShowStep2Modal(fileId));
-          return;
-        } catch (e) {
-          await interaction.reply({
-            content: "📁 **Continue:** open the next window to add images #5–#9.",
-            components: [new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setCustomId(`d7_show_more:${fileId}:2`).setLabel("➡️ Continue").setStyle(ButtonStyle.Primary),
-            )],
-            ephemeral: true,
-          }).catch(() => {});
-          return;
-        }
+        // زر الاستكمال — المسار الوحيد والمضمون (لا سلسلة نافذة-فوق-نافذة)
+        return interaction.reply({
+          content: "📁 **Step 1/3 saved** — press **Continue** to open the window for images #5–#9.",
+          components: [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`d7_show_more:${fileId}:2`).setLabel("➡️ Continue").setStyle(ButtonStyle.Primary),
+          )],
+          ephemeral: true,
+        }).catch(() => {});
       }
       // المرحلة الثانية: صور 5–9، ثم نافذة الخانة العاشرة
       if (kind === "files_show2") {
@@ -3662,19 +3660,13 @@ async function handleInteraction(interaction) {
         if (bad) return interaction.reply({ content: "❌ Every image URL must start with http:// or https://.", ephemeral: true });
         draft.images.push(...images);
         db.showcaseDrafts.set(interaction.user.id, draft.fileId, draft.text, draft.images);
-        try {
-          await interaction.showModal(filesShowStep3Modal(fileId));
-          return;
-        } catch (e) {
-          await interaction.reply({
-            content: "📁 **Continue:** open the last window for image #10.",
-            components: [new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setCustomId(`d7_show_more:${fileId}:3`).setLabel("➡️ Continue").setStyle(ButtonStyle.Primary),
-            )],
-            ephemeral: true,
-          }).catch(() => {});
-          return;
-        }
+        return interaction.reply({
+          content: "📁 **Step 2/3 saved** — press **Continue** to open the last window (image #10).",
+          components: [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`d7_show_more:${fileId}:3`).setLabel("➡️ Continue").setStyle(ButtonStyle.Primary),
+          )],
+          ephemeral: true,
+        }).catch(() => {});
       }
       // المرحلة الأخيرة: الخانة 10 ثم الإرسال — كل صورة إضافية تصل في
       // إيمبد سطر بعد الرئيسي، وبلا رابط معاينة (طلب المالك)

@@ -1270,16 +1270,18 @@ function filesDeleteView(file) {
 }
 
 // حمولة رسالة الملف أو التحديث — الترتيب بطلب المالك (صورته): العنوان
-// ثم النص ثم خط [Download] الأزرق (في التحديث) ثم خط [Preview] الأزرق —
-// "عدلها خليها preview بدون video" — والصورة الاختيارية آخر شيء أسفل
-// الإيمبد. رسالة العرض لها باني متعدد الصور منفصل (أدناه)
+// ثم النص ثم خط [Download] الأزرق (في التحديث) — وفي رسالة التحديث
+// حذف خط [Preview] نهائياً: "في رسالة update فيه زر preview احدفها ما
+// ابيها" — الخط الأزرق [Preview] (بدون video) يبقى في رسالة الملف
+// العادية فقط، والصورة الاختيارية آخر شيء أسفل الإيمبد. رسالة العرض
+// لها باني متعدد الصور منفصل (أدناه)
 function filesSendPayload(file, kind, text, image, download) {
   const title = kind === "upd" ? `${file.name} — Update` : file.name;
   const parts = [];
   const bodyText = String(text || "").trim() || file.details || "";
   if (bodyText) parts.push(bodyText);
   if (kind === "upd" && /^https?:\/\//.test(String(download || ""))) parts.push(`[Download](${download})`);
-  if (/^https?:\/\//.test(String(file.preview_url || ""))) parts.push(`[Preview](${file.preview_url})`);
+  if (kind !== "upd" && /^https?:\/\//.test(String(file.preview_url || ""))) parts.push(`[Preview](${file.preview_url})`);
   const e = embed(title, parts.join("\n\n"));
   if (/^https?:\/\//.test(String(image || ""))) e.setImage(image);
   return { embeds: [e], components: [] };
@@ -3626,7 +3628,10 @@ async function handleInteraction(interaction) {
           return interaction.reply({ content: `❌ Could not post in <#${roomId}> — check that I can send messages there.`, ephemeral: true });
         }
         const doneTxt = kind === "files_upd" ? "Update" : "Message";
-        return interaction.reply({ content: `✅ ${doneTxt} posted in <#${roomId}> — your text comes first, then the blue Download and Preview links inside the embed${download ? "" : ""}${image ? " with your image under them" : ""}.`, ephemeral: true });
+        const detail = kind === "files_upd"
+          ? "your text comes first, then the blue Download link inside the embed"
+          : "your text comes first, then the blue Preview link inside the embed";
+        return interaction.reply({ content: `✅ ${doneTxt} posted in <#${roomId}> — ${detail}${image ? " with your image under them" : ""}.`, ephemeral: true });
       }
       // ─────────── رسالة العرض: عشر خانات صور عبر نوافذ متسلسلة ───────────
       // كل نافذة تُنهى بزر (+ Continue) يفتح التالية — فتح نافذة فوق نافذة

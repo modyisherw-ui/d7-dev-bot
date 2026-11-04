@@ -152,6 +152,44 @@ CREATE TABLE IF NOT EXISTS files (
 );
 `);
 
+// ═══════════════ مسودات رسالة العرض (Showcase) ═══════════════
+// نوافذ العرض الثلاث تحفظ المسودة هنا لا في الذاكرة: نافذة الخطوة
+// التالية قد تُقدَّم بعد أن يُعاد تشغيل البوت (نشر جديد أو تحديث)،
+// والمسودة في الذاكرة تضيع فيظهر "expired" للمالك — في الجدول تصمد
+// حتى بعد إعادة التشغيل، وبعمر 15 دقيقة، وتُحذف بعد الإرسال
+db.exec(`
+CREATE TABLE IF NOT EXISTS showcase_drafts (
+  user_id TEXT PRIMARY KEY,
+  file_id INTEGER NOT NULL,
+  text TEXT NOT NULL DEFAULT '',
+  images TEXT NOT NULL DEFAULT '[]',
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+`);
+
+db.showcaseDrafts = {
+  get(userId) {
+    const row = db.prepare(`SELECT * FROM showcase_drafts WHERE user_id=?`).get(String(userId));
+    if (!row) return null;
+    if (!(Date.now() - Number(row.updated_at) < 15 * 60 * 1000)) {
+      db.prepare(`DELETE FROM showcase_drafts WHERE user_id=?`).run(String(userId));
+      return null;
+    }
+    let images = [];
+    try { images = JSON.parse(row.images || "[]"); } catch (_) { images = []; }
+    return {
+      fileId: Number(row.file_id),
+      text: String(row.text || ""),
+      images: Array.isArray(images) ? images.filter(u => /^https?:\/\//.test(u)) : [],
+    };
+  },
+  set: (userId, fileId, text, images) =>
+    db.prepare(`INSERT INTO showcase_drafts (user_id, file_id, text, images, updated_at) VALUES (?,?,?,?,?)
+      ON CONFLICT(user_id) DO UPDATE SET file_id=excluded.file_id, text=excluded.text, images=excluded.images, updated_at=excluded.updated_at`)
+      .run(String(userId), Number(fileId), String(text || ""), JSON.stringify(images || []), Date.now()),
+  drop: (userId) => db.prepare(`DELETE FROM showcase_drafts WHERE user_id=?`).run(String(userId)),
+};
+
 // ═══════════════ Tickets (numbered, one channel per ticket) ═══════════════
 db.tickets = {
   nextNumber(guildId) {

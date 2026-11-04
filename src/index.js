@@ -38,8 +38,8 @@ const pendingProduct = new Map();
 // مسودات المنشورات بانتظار اختيار الروم (نظاما Free و Files)
 const pendingFree = new Map();
 const pendingFiles = new Map();
-// مسودة رسالة العرض (10 خانات صور مقسّمة على نوافذ متسلسلة)
-const pendingShowcase = new Map();
+// مسودة رسالة العرض صارت مخزّنة في قاعدة البيانات (showcase_drafts في
+// db.js) حتى تصمد لإعادة تشغيل البوت أثناء النوافذ المتسلسلة
 
 // كاتيقوري الملفات: نظام Files لا يُرسل إيمبداً إلا داخل روماتها
 // (طلب صاحب اللوحة: "ما أقدر أرسل الإيمبد الا في category حق الملفات
@@ -1233,7 +1233,7 @@ function filesFileView(file, message) {
   const hasVideo = /^https?:\/\//.test(String(file.preview_url || ""));
   return {
     embeds: [embed(`Files · ${file.name}`, [
-      ...(hasVideo ? [`[Preview video](${file.preview_url})`, ""] : []),
+      ...(hasVideo ? [`[Preview](${file.preview_url})`, ""] : []),
       file.details || "No details yet.",
       "",
       `**Main:** <#${file.main_channel_id}> · **Showcase:** <#${file.show_channel_id}> · **Updates:** <#${file.updates_channel_id}>`,
@@ -1269,19 +1269,17 @@ function filesDeleteView(file) {
   };
 }
 
-// حمولة رسائل الملفات: رابط المعاينة أزرق أعلى الإيمبد ثم النص،
-// والصورة الاختيارية تحتها داخل الإيمبد — "احط رابط الصورة وهو يحطها"
-// حمولة رسالة الملف أو التحديث: ما عاد يُستخدم للعرض — العرض له باني
-// رسالة متعددة الصور (أدناه). رابط المعاينة أزرق أعلى الإيمبد، ورابط
-// التحميل أزرق فوقه في التحديث — "في رابط تحميل ويكون زر تحميل داخل
-// الايمبد" — والصورة تحت النص داخل الإيمبد
+// حمولة رسالة الملف أو التحديث — الترتيب بطلب المالك (صورته): العنوان
+// ثم النص ثم خط [Download] الأزرق (في التحديث) ثم خط [Preview] الأزرق —
+// "عدلها خليها preview بدون video" — والصورة الاختيارية آخر شيء أسفل
+// الإيمبد. رسالة العرض لها باني متعدد الصور منفصل (أدناه)
 function filesSendPayload(file, kind, text, image, download) {
   const title = kind === "upd" ? `${file.name} — Update` : file.name;
   const parts = [];
-  if (kind === "upd" && /^https?:\/\//.test(String(download || ""))) parts.push(`[Download](${download})`);
-  if (/^https?:\/\//.test(String(file.preview_url || ""))) parts.push(`[Preview video](${file.preview_url})`);
   const bodyText = String(text || "").trim() || file.details || "";
   if (bodyText) parts.push(bodyText);
+  if (kind === "upd" && /^https?:\/\//.test(String(download || ""))) parts.push(`[Download](${download})`);
+  if (/^https?:\/\//.test(String(file.preview_url || ""))) parts.push(`[Preview](${file.preview_url})`);
   const e = embed(title, parts.join("\n\n"));
   if (/^https?:\/\//.test(String(image || ""))) e.setImage(image);
   return { embeds: [e], components: [] };
@@ -2303,7 +2301,7 @@ async function handleInteraction(interaction) {
       }
       // زر استكمال نوافذ العرض (احتياط إن رفض ديسكورد فتح نافذة بعد نافذة)
       if (action === "d7_show_more") {
-        const draft = pendingShowcase.get(interaction.user.id);
+        const draft = db.showcaseDrafts.get(interaction.user.id);
         const fileId = Number(parts[1]);
         const stage = Number(parts[2]) === 3 ? 3 : 2;
         if (!draft || Number(draft.fileId) !== fileId) {
@@ -3613,7 +3611,10 @@ async function handleInteraction(interaction) {
         if (image && !/^https?:\/\//.test(image)) {
           return interaction.reply({ content: "❌ The image URL must start with http:// or https://.", ephemeral: true });
         }
-        const download = (interaction.fields.getTextInputValue("download") || "").trim();
+        // خانة التحميل في نافذة التحديث فقط — قراءتها في نافذة الرسالة
+        // العادية (بلا هذه الخانة) ترمي داخل ديسكورد وتظهر
+        // "Something went wrong. Check the bot console and config."
+        const download = kind === "files_upd" ? (interaction.fields.getTextInputValue("download") || "").trim() : "";
         if (download && !/^https?:\/\//.test(download)) {
           return interaction.reply({ content: "❌ The download link must start with http:// or https://.", ephemeral: true });
         }
@@ -3623,7 +3624,7 @@ async function handleInteraction(interaction) {
           return interaction.reply({ content: `❌ Could not post in <#${roomId}> — check that I can send messages there.`, ephemeral: true });
         }
         const doneTxt = kind === "files_upd" ? "Update" : "Message";
-        return interaction.reply({ content: `✅ ${doneTxt} posted in <#${roomId}> — the preview link is blue inside the embed${download ? " with your Download link on top" : ""}${image ? " with your image under it" : ""}.`, ephemeral: true });
+        return interaction.reply({ content: `✅ ${doneTxt} posted in <#${roomId}> — your text comes first, then the blue Download and Preview links inside the embed${download ? "" : ""}${image ? " with your image under them" : ""}.`, ephemeral: true });
       }
       // ─────────── رسالة العرض: عشر خانات صور عبر نوافذ متسلسلة ───────────
       // المرحلة الأولى: النص + 4 صور، ثم تُفتح نافذة الصور 5–9 تلقائياً
@@ -3635,11 +3636,7 @@ async function handleInteraction(interaction) {
         if (!file) return interaction.reply({ content: "❌ That file no longer exists.", ephemeral: true });
         const { images, bad } = collectShowcaseImages(interaction, 1, 4);
         if (bad) return interaction.reply({ content: "❌ Every image URL must start with http:// or https://.", ephemeral: true });
-        pendingShowcase.set(interaction.user.id, {
-          fileId,
-          text: (interaction.fields.getTextInputValue("text") || "").trim(),
-          images,
-        });
+        db.showcaseDrafts.set(interaction.user.id, fileId, (interaction.fields.getTextInputValue("text") || "").trim(), images);
         try {
           await interaction.showModal(filesShowStep2Modal(fileId));
           return;
@@ -3657,14 +3654,14 @@ async function handleInteraction(interaction) {
       // المرحلة الثانية: صور 5–9، ثم نافذة الخانة العاشرة
       if (kind === "files_show2") {
         const fileId = Number(interaction.customId.split(":")[2]);
-        const draft = pendingShowcase.get(interaction.user.id);
+        const draft = db.showcaseDrafts.get(interaction.user.id);
         if (!draft || Number(draft.fileId) !== fileId) {
           return interaction.reply({ content: "❌ The showcase flow expired — press **Send Showcase** on the file again.", ephemeral: true });
         }
         const { images, bad } = collectShowcaseImages(interaction, 5, 9);
         if (bad) return interaction.reply({ content: "❌ Every image URL must start with http:// or https://.", ephemeral: true });
         draft.images.push(...images);
-        pendingShowcase.set(interaction.user.id, draft);
+        db.showcaseDrafts.set(interaction.user.id, draft.fileId, draft.text, draft.images);
         try {
           await interaction.showModal(filesShowStep3Modal(fileId));
           return;
@@ -3683,14 +3680,14 @@ async function handleInteraction(interaction) {
       // إيمبد سطر بعد الرئيسي، وبلا رابط معاينة (طلب المالك)
       if (kind === "files_show3") {
         const fileId = Number(interaction.customId.split(":")[2]);
-        const draft = pendingShowcase.get(interaction.user.id);
+        const draft = db.showcaseDrafts.get(interaction.user.id);
         if (!draft || Number(draft.fileId) !== fileId) {
           return interaction.reply({ content: "❌ The showcase flow expired — press **Send Showcase** on the file again.", ephemeral: true });
         }
         const { images, bad } = collectShowcaseImages(interaction, 10, 10);
         if (bad) return interaction.reply({ content: "❌ Every image URL must start with http:// or https://.", ephemeral: true });
         draft.images.push(...images);
-        pendingShowcase.delete(interaction.user.id);
+        db.showcaseDrafts.drop(interaction.user.id);
         const file = db.prepare("SELECT * FROM files WHERE id=?").get(fileId);
         if (!file) return interaction.reply({ content: "❌ That file no longer exists.", ephemeral: true });
         const channel = filesRoomInCategory(interaction.guild, file.show_channel_id);
